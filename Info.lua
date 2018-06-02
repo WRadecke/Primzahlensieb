@@ -68,7 +68,7 @@ Textform einer Zeitmessung
 function setTimeResult()
 local t=os.clock()
     local tt=t-time
-    local prec = N < 770 and 0.0000000001 or 0.000001
+    local prec = N < 770 and 0.00000000001 or 0.000001
     timetext = "time for "..tostring(math.floor(N)).." = "..tostring(tt-tt%prec).." sec"    
 end
 

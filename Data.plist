@@ -8,5 +8,7 @@
 	<string>§</string>
 	<key>showstartupscreen</key>
 	<string>§</string>
+	<key>sievesize</key>
+	<real>10000</real>
 </dict>
 </plist>

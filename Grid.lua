@@ -26,7 +26,7 @@ end
 --[[
 Y(i) gibt die Position der Gitterzelle Nr.i an.
 Beim Zeichnen wird rectMode(CORNER) benutzt.
-Diese y-Position wird beim Zeichnen noch an der vertikalen
+Diese y-Position wird beim Zeichnen noch an der vertikalen 
 Scrollposition gr.Y gespiegelt. Das bedeutet genauer folgendes:
 Y(i)  ist eine scrollneutrale y-Position der Gitterzelle Nr. i.
 Für diese y-Position wird in der Software bei Bildschirmausgaben der
@@ -503,12 +503,12 @@ allerdings intern unterbunden.
 --]]
 local function mppgtN() -- bedeutet: multi+prim greater than N
 local p,multi=navi.prim,navi.multi
-local txt=tostring(multi).."+"..tostring(p).." > "..tostring(math.floor(N)) return txt 
+local txt=table.concat{multi,"+",p," > ",N} return txt 
 end
     
-local function ppgtN() -- bedeutet: prim+prim grater than N
+local function ppgtN() -- bedeutet: prim*prim grater than N
 local p=navi.prim
-local txt=tostring(p).."*"..tostring(p).." > "..tostring(math.floor(N)) return txt
+local txt=table.concat{p,"*",p," > ",N} return txt
 end
 ------------------------------------------------------------------------------------------   
      
@@ -517,7 +517,7 @@ font("Courier"); fontSize(fntsize)
 nw,nh=textSize(navitxt)
 popStyle()
 return       -- Die Returnwerte kommen noch, Es sind 3 Funktionen. 
-function (n) -- 1. Rückgabefunktion: Navigiere mit Hilfe von navi
+function (n) -- 1. Rückgabefunktion navigate: Navigiert mit Hilfe von navi
 --[[
 Die hier anonyme Funktion heisst im Globalen navigate. Sie arbeitet wie ein iterator, 
 der durch Primzahlen und ihre Vielfachen iteriert .Sein status ist die table navi.
@@ -527,7 +527,7 @@ Das Navigieren wird durch Fingertips ins Gitter oder in die Primzahltabelle ausg
 Ausgehend von einer Primzahl p navigiert die Funktion - bei wiederholtem Antippen eines
 bereits erreichten Navigationsziels zu Vielfachen von p. Falls man etwas anderes antippt,
 stellt sich die Funktion auf den kleinsten Teiler einer angetippten zusammengesetzten Zahl
-als neue Primzahl ein.
+als neue Primzahl ein, oder auch auf eine andere angetippte Primzahl.
 Falls es zu einem Vielfachen von p kein weiteres Vielfache <= N gibt und man tippt wieder
 darauf, gibt es einen Hinweis darauf, dass es nicht mehr weiter geht. Ebenso wird verfahren,
 wenn p*p > N ist, denn dann gibt es überhaupt keine "Vielfachen <= N" von p, und es gibt 
@@ -567,9 +567,9 @@ if isPrim(n)
         end
      end
 end,
-function () return navi end,    -- 2. Rückgabefunktion, gibt die gekapselt table navi zurück.
-function ()                     -- 3. Rückgabefunktion, gibt eine Textdarstellung des Inhalts von navi zurück.
-local txt="{ prim = "..tostring(navi.prim)..", ld = "..navi.ld..", multi = "..tostring(navi.multi).." }"
+function () return navi end,    -- 2. Rückgabefunktion navi: Gibt die gekapselt table navi zurück.
+function ()                     -- 3. Rückgabefunktion naviText: Gibt eine Textdarstellung des Inhalts von navi zurück.
+local txt=table.concat{"{ prim = ",navi.prim,", ld = ",navi.ld,", multi = ",navi.multi," }"}
 return txt,nw,nh,fntsize  -- außer txt auch Breite,Höhe der textbox und benutzten fontSize zurück geben.
 end
 end

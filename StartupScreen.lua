@@ -9,14 +9,15 @@ hier anonym sind. Im setup werden sie wie folgt benannt:
 ssp               zeige (true/false) Primzahlen auf der Spirale
 ssups             starte (true/false) StartupScreen
 pivot             zeige (true/false) Pivotpunkt während der Animation der Spirale
-sdt:              Standart herstellen für die ersten drei Optionen
+std:              Standart herstellen für die ersten drei Optionen
 tweenSplash:      Starten der Animation des StartupScreens
 drawSplash:       Zeichnen der Animation.
 splashRunning:    Testen, ob die Animation läuft.
 splashEnd:        Stoppen der Animation
 Für die ersten 3 Funktionen werden beim Aufruf die angeforderten boolschen 
-Werte in ProjectData permanent gespeicher und beim nächsten Start wieder
-eingelesen -und somit dann wirksam. Aufrufe dieser 3 Funktionen erfolgen
+Werte in ProjectData permanent gespeichert und beim nächsten Start wieder
+eingelesen -und somit dann wirksam.  Die 4. Funktion std stellt die Standartwerte
+für die ersten 3 wieder her. Aufrufe dieser 4; Funktionen erfolgen
 manuell über das Controlpanel z.B. ssp(false) bei "Einen Befehl eingeben"
 --]]
 function createStartupScreen() 
@@ -60,6 +61,8 @@ berechnet die Interpolationspunkte und
 verbindet diese durch Geradensegmente.
 Für die Argumente p,q werden jeweils zwei 
 aufeinander folgende Elemente von tbl benutzt.
+Die Interpolation erfolgt "on the fly":
+d.h. während des Zeichnens in der Funktion drawSplash.
 --]]    
 local function interpol(p,q,n)
     local cc=hCell/3+2
@@ -67,17 +70,25 @@ local function interpol(p,q,n)
     h2 = h2 + cc
     --[[
     die Punkte p und q werden als Start/End-Punkte
-    in die Interpolationstabelle t aufgenommen.
+    mit in die Interpolationstabelle t aufgenommen.
     Wesentlich ist, dass in p,q die Winkel
     p.phi,q.phi gespeichert sind, sonst würde für
     die Interpolation nicht der richtige Wert r
     für die Interpolationspunkte erzeugt werden können.
+        
+    Zwischen Startpunkt p und Endpunkt q sollen n
+    Interpolationspunkte liegen aber es sind n+1
+    Zwischenabschnitte. 
+    p---ip1---ip2---,...,---ip(n-1)---ipn----q
+    | 1  |  2  |  3      n-1 |      n  | n+1 |
+    "Zwischen n+2 Zaunpfosten liegen n+1 Zaunfelder"
+    Daher delta=(q.phi-p.phi)/(n+1)
     --]]
     
     local t={{x=p.x,y=p.y}}  -- p ist Startpunkt
-    delta=(q.phi-p.phi)/n
+    delta=(q.phi-p.phi)/(n+1)
     local v,r,xx,yy=0,0,0,0
-    for i=1,n-1 do
+    for i=1,n do
         v=p.phi+i*delta;
         r=c*v; 
         xx=r*math.cos(v); 
@@ -90,7 +101,8 @@ local function interpol(p,q,n)
         line(t[i-1].x,t[i-1].y,t[i].x,t[i].y)      
     end
     --[[ Anzahl der Interpolationspunkte n in der Mitte anzeigen
-    if n > 10 then
+        Im sichtbaren Teil kommt ein Maximum von 66 zustande
+    if n > 9 then
         local j=math.floor(#t/2)
         pushStyle()
         fill(clr(a.bg))
@@ -104,21 +116,21 @@ local function interpol(p,q,n)
     end
     --]]
 end
-return -- eine table mit 7 Funktionen wird zurückgegeben
-{   
-function (bshow)
+return -- Eine table mit 8 Funktionen wird zurückgegeben
+{      -- Es werden jeweils die im setup vergebenen Funktionsnamen als Kommentare angeschrieben.  
+function (bshow) -- ssp
 showprimes=bshow
 saveProjectData("showspiralprimes", showprimes )      
 end,    
-function (bshow)
+function (bshow) -- ssups
 showsups=bshow
 saveProjectData("showstartupscreen",showsups)       
 end,    
-function (bshow) 
+function (bshow) --pivot
 showpivotpoint=bshow 
 saveProjectData("showpivotpoint",showpivotpoint)       
 end,
-function ()
+function () -- std
 showprimes=true
 showpivotpoint=false
 showsups=true  
@@ -126,7 +138,7 @@ saveProjectData("showspiralprimes", showprimes )
 saveProjectData("showstartupscreen",showsups) 
 saveProjectData("showpivotpoint",showpivotpoint)    
 end,
-function () -- Animation der Spirale starten.
+function () -- tweenSplash, Animation der Spirale starten.
 --[[
 point ist das Subjekt das durch die Animation - in 
 Raumzeit unsichtbar bewegt wird. Der Anfangwert von point
@@ -141,7 +153,7 @@ running=true
 tween.play(id1)
 tween.play(id2)  
 end,
-function ()       -- animiertes Zeichnen der Spirale
+function ()       -- drawSplash, animiertes Zeichnen der Spirale
 local cc=hCell/3+2
 local w2,h2,wh=W/2,H/2,math.min(W/2,H/2+cc)
 h2=h2+cc
@@ -150,13 +162,14 @@ pushMatrix()
 local act=colortables.act
 -- ich und ichich sind Bilder meines Namenskürzels
 if act==1 then sprite(ich,W-50,50,50) else  sprite(ichich,W-50,50,50) end
+if act==1 then sprite(eulerwr,80,H-80,200,160) else sprite(euler4,80,H-80,200,160) end
 translate(w2,h2)    -- w2,h2 ist die Mitte (h2 nur näherungsweise)
-                    -- translate verschiebt alle Koordinaten: (x,y)---> (x+w2,y+w2)
+                    -- translate verschiebt alle Koordinaten: (x,y)---> (x+w2,y+h2)
 fill(clr(2))
 FONT(2)
 fontSize(gfntsize)
 textMode(CENTER)
-local rr=(point.x)^2+(point.y)^2    -- point ist der animierte Punkt
+local rr=(point.x)^2+(point.y)^2    -- point ist der animierte Punkt- der pivot-Punkt
                                     -- quadratischer Abstand von point 
                                     -- zum Zentrum der Spirale
 strokeWidth(4)                      -- Strichbreite der Spirale
@@ -209,7 +222,7 @@ end
 popMatrix()
 popStyle()
 end,
-function () return running end,    -- Abfragen ob Animation läuft
-function () return splashEnd() end -- Animation beenden
+function () return running end,    -- splashRunning, Abfragen ob Animation läuft
+function () return splashEnd() end -- splashEnd Animation beenden
 }
 end

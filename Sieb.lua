@@ -68,7 +68,7 @@ durch Schleifenvariable oder Einzelangaben in den Algorithmus eingebracht. Man k
 auch argumentieren, dass jede lua-table sowohl ihre Schlüssel als auch die zugehörigen Werte 
 verwaltet. Insofern verwaltet SE auch die zu siebenden Zahlen 1,...,N - als Schlüssel.
 
-Das Triple N,prim,SE ist sehr wichtig für den Ablauf des Siebens.Durch initSE() wird der 
+Das Triple N,prim,SE ist sehr wichtig für den Ablauf des Siebens.Durch initSE() wird der einen erneuten Durchlauf
 Startzustand hergestellt.
 Das Sieb (hier als Kurzbegriff des Algorithmus's) ist dringend darauf angewiesen, dass der
 Zustand im Verlauf des Siebens korrekt und insbesondere in der richtigen Reihenfolge 
@@ -79,22 +79,83 @@ in alternativer Form (codiert in einem hohen Bit von SE[i]: m(i)=1 falls i Primz
 function initSE()
 local initbit=initBit()
 SE={} 
-SE[1] = 1    -- 1 ist keine Primzahl; m(1)=0; führt zur Gleichung 1=1*1 im Inspektionsmodus
+SE[1] = 1    -- 1 ist keine Primzahl; m(1)=0; SE[1]=1 führt zur Gleichung 1=1*1 im Inspektionsmodus
              -- Das wird definitorisch wie in der Mathematik üblich festgelegt.
              -- Bis auf die Zahl 1 sind alle anderen Zahlen als "noch nicht behandelt" eingestuft.
 for i=2,N do  SE[i]=initbit end 
 end
 
---[[
-Sucht den nächsten (nach aktuellem prim) unbehandelten Eintrag in der 
-Tabelle SE und gibt den Index found dazu zurück. 
-Gibt 0 zurück falls kein solcher existiert.
-Das ist die vielleicht wichtigste Hilfsfunktion für den Siebablauf.
+--[[ 
+Ein closure für makenext. Diese Funktion
+(eine Objektfabrik) muss bei jeder Änderung von N 
+erneut in der Form makenext=createMakenext() aufgerufen
+werden, um den Zustand act=1 zu erreichen.
+Dies geschieht in function setN(...) in Main.lua.
+makenext ist der Iterator durch den Zahlenurwald der
+von einer zur nächsten Primzahl findet. Er würde nicht
+weiterfinden wenn ihm nicht die Vielfach-Machete die
+Sicht freischlüge. 25.05.2018:
+Der Sinn dieses closures im Vergleich zur bisherigen 
+Version ist größere Klarheit: Bisher war immer ein
+gesonderter Funktionaufruf neustart() erforderlich, der 
+den Fall das makenext() am Ende eines Siebdurchlaufs 
+nochmals aufgefufen wurde abhandelte, um einen erneuten
+Durchlauf zu gestatten.
+Jetzt wird zum Finden der nächsten Primzahl immer
+n=makenext() aufgerufen. Nach einem vollständigen
+Siebdurchlauf ebenfalls, wobei makenext automatisch
+von vorn beginnt - einschließlich Neu-Initialisierung 
+aller erforderlichen Objekte mittels reset(). Die
+Objektfabrik createMakenext() wird hier in ziemlich
+besonderer Weise aufgerufen: Ein Aufruf erfolgt aus dem 
+Inneren der Return-Funktion mit Restartbenandlung.
+Vier andere Aufrufe erfolgen extern in setup(),setN()
+und in simpleimmerWeiter() sowie animateimmerWeiter().
+An den letztgenannten Stellen wird die Version mit 
+Restartbehandlung produziert.
 --]]
-function makenext()
-    local found=0
-    for i=prim+1,N do if m(i)==2 then found=i break end end
-    return found  
+function createMakenext(a) 
+local act= a or 1
+local initbit=initBit()
+--[[
+act ist der status des Iterators makenext, er iteriert 
+durch die aufsteigende Folge der Primzahlen bis N.
+Die Bahn der Werte der Variablen act ist fast
+ein Spiegelbild der Bahn der Werte der globalen Variablen 
+prim. Nur am Ende des Siebdurchlaufs wird ihr Wert auf der 
+Position N+1 geparkt, während prim niemals dort landet.
+--]]
+return a > N
+and 
+    function () -- Version mit Restartbehandlung
+        --[[
+        Die Version mit Restartbehandlung wird nach jedem vollen
+        Siebdurchlauf von aussen durch die Siebfunktionen
+        immerWeiter bzw animateimmerWeiter aktiviert.
+        --]]
+        if act > N then 
+            act=1 -- nach einem vollen Siebdurchlauf wieder bei 1 beginnen
+            local vd=volldurchlauf
+            reset() -- insbesondere SE in seinen Startzustand versetzen.
+            volldurchlauf=vd
+            --[[
+            Hier darunter wird für alle Aufrufe nach dem ersten die
+            Version ohne Restartbehandlung aktiviert.
+            --]]
+            makenext=createMakenext(2)
+        end
+        local found=N+1
+        for i=act+1,N do if SE[i]==initbit then found=i break end end 
+        act=found
+        return act
+    end 
+or 
+    function () -- Version ohne Restartbehandlung
+        local found=N+1
+        for i=act+1,N do if SE[i]==initbit then found=i break end end 
+        act=found
+        return act        
+    end
 end
 
 --[[
@@ -109,23 +170,36 @@ Markiert n mit v und falls v==1 ist:
 Ergänzt die Tabelle der Primzahlen pt um den gefundene Eintrag n.
 Die genaue Logik dieser Funktion ist wesentlich für den korrekten
 Ablauf des Siebvorgangs.
---]]
+Wurde nur noch für v=1 gebraucht. Daher durch markprim ersetzt. 
+
 function markset(n,v)
 local vv=m(n)
 if vv==2 then markiere(n,v) end
 if v == 1 then 
-    if vv==2 then  -- gegen Doppelerfassung von Primzahlen
     appendPrime(n) -- es entsteht eine Table von Primzahlen + Begleitinformationen.
-    end
     sposTo(n)
 end
+end
+--]]
+
+--[[
+n als Primzahl markieren und an Primzahltable pt anhängen.
+--]]
+function markprim(n)
+setm(n,1)
+appendPrime(n)
+sposTo(n) -- Position für gelben Rahmen zur Position von n bewegen.
 end
 
 --[[
 Speichert in SE[i] den kleinsten Primteiler d 
 von i, und "nullt" Wert in den "hohen" 
 mbits=0x3000000000000000 von SE[i]
-Wird in animateVielfache(...) benutzt.
+Wird in animateVielfache(...) benutzt. Der Wert
+d wird nur gesetzt, wenn der Siebalgorithmus zum
+ersten mal den Eintrag i in SE "besucht". Nur
+dadurch ist garantiert, dass d der kleinste Teiler
+von i ist. Danach hat die Marke m(i) den Wert 0.
 --]]
 function SETm(i,d)
 if m(i)==2 then SE[i]=d end  
@@ -136,8 +210,7 @@ Callback für die Schaltfläche "Einzelschritt"
 --]]
 function Weiter()
 if splashRunning() then return end -- vor Beendigung des StatupScreens nicht tun.
-if Animation and running then -- Bei einem "Folgeklick" auf die Schaltfläche "Einzelschritt".
-if pause then PauseResume() end
+if Animation and running then -- Bei einem "Folgeklick" auf die Schaltfläche "Einzelschritt".;
 tween.resetAll() 
 aniFinish()  
 Animation=false
@@ -166,14 +239,13 @@ function allessieben()
 if splashRunning() then return end -- vor Beendigung des StatupScreens nicht tun.
 volldurchlauf=true
 sound(SOUND_PICKUP, 14295)
-tween.play(liveid)
 Weiter()
 end
 
 
 --[[
 Streichen bedeutet hier mit 0 markieren und später beim Zeichen mit clr(1)
-färben (rot/dunkel dunkel falls NichPrimzahlen_Loeschen aktiv ist).
+färben (rot/dunkel dunkel falls NichtPrimzahlen_Loeschen aktiv ist).
 --]]
 function streicheVielfache(n) -- n ist eine Primzahl
     k=n*n   -- k=n*n ist erstes zu streichendes Vielfache von n
@@ -214,35 +286,41 @@ end
 "weiter" ohne Animation.
 --]]
 function simpleWeiter()
-neustart() -- Neustart ermöglichen
-if volldurchlauf then tween.play(liveid) end
+local n=makenext()
 if prim == 1 then gr.Y=gr.yMin end
-if prim*prim <= N then
-    local n=makenext()
-    if n > 0  then simplestreicheVielfache(n) end           
-end  
+if n <= N  then markprim(n) simplestreicheVielfache(n) end            
 end
 
 --[[
 Vielfache behandeln ohne Animation.
+n ist hier eine Primzahl und sie ist bereits 
+als solche registriert (vgl. oben simpleWeiter ).
 --]]
-function simplestreicheVielfache(n) -- n ist hier eine Primzahl
+function simplestreicheVielfache(n) 
+    local initbit=initBit()
     if n==1 then return end
     k=n*n
     if k > N then
         simpleimmerWeiter()    
     else
-        markset(n,1)
-        -- Die in der Schleife behandelten Zahlen sind als "nichtprim" eingestuft.
-        -- Durch SE[i]=n werden auch die mbits von SE[i] gelöscht vgl function am():
-        -- Wenn die if-Bedingung eintritt ist SE[i]=0x2FFFFFFFFFFFFFFF=2^61 der Wert
-        -- von SE[i]. der neue Wert n ist aber hier so klein, dass er die bits 61,62
-        -- auf keinen Fall erreicht. Daher stehen nach der Zuweisung dort 2 binäre 0.
-        for i=k,N,n do if m(i)==2 then SE[i]=n end end --  Schrittweite ist n, 
-                                                       -- Schleife bleibt im Bereich der 
-                                                       -- Vielfachen von n.
-                                                       -- Bei einer "Vielfach-Schleife"
-                                                       -- kann das  if ... mehrfach auftreten.
+        --[[ 
+        Die in der Schleife behandelten Zahlen werden  als "nichtprim" eingestuft.
+        Durch SE[i]=n werden auch die mbits von SE[i] gelöscht vgl function setm():
+        Wenn die if-Bedingung eintritt ist SE[i]=0x2FFFFFFFFFFFFFFF=2^61 der Wert
+        von SE[i]. der neue Wert n ist aber hier so klein, dass er die bits 61,62
+        auf keinen Fall erreicht werden . Daher stehen nach der Zuweisung dort 2 
+        binäre 0.
+        Mit dieser Behandlung wird in SE[i] der kleinste Teiler von i gespeichert.
+        Die Bedingung if m(i)==2... ist zwingend notwendig.
+        --]]
+        for i=k,N,n do if SE[i]==initbit then SE[i]=n end end --[[ 
+                                                        Schrittweite ist n, 
+                                                        Schleife bleibt im Bereich der 
+                                                        Vielfachen der Primzahl n.
+                                                        Bei einer "Vielfach-Schleife"
+                                                        kann das  if ... mehrfach auftreten,
+                                                        z.B. für alle Potenzen von n.
+                                                        --]]
         sposTo(n)
         if volldurchlauf then Weiter() elseif anirestart then Ani(true) anirestart=false end
     end
@@ -252,28 +330,27 @@ end
 Endphase des Siebens unanimiert abarbeiten, in der keine Vielfachen mehr 
 gestrichen werden müssen.
 Wird aufgerufen in einem Siebzustand in dem feststeht, dass alle noch nicht 
-behandelten Zahlen n Primzahlen sind. das bedeutet: SE[n] == 2. Der Zustand 
+behandelten Zahlen n Primzahlen sind. das bedeutet: m(n) == 2. Der Zustand 
 wird an Hand der Bedingung prim*prim > N festgemacht. Zum Anfang wird mittels
 ECount() eine Vorhersage für die finale Anzahl der Primzahlen erstellt.
 --]]
 function simpleimmerWeiter()  -- Ohne Animation
     ECount()
-    local n=makenext() -- prim -- Beim Aufruf ist n noch nicht als Primzahl gekennzeichnet
-    while n > 0  do
-    markset(n,1)    --als Primzahl makieren und an die Tabelle pt anhängen
+    local n=makenext() 
+    while n <= N  do
+    markprim(n)    --als Primzahl makieren und an die Tabelle pt anhängen
     if Reanimation() then return end
     n=makenext()
     end 
     fertig=true
+    makenext=createMakenext(n)
     moveLiverectToMiddle()
     testWolfram(N,pr(countprimes))
     adjustInfoScrollrange()
     zeigeInfounten()
     zeigeGridunten()
     sound(SOUND_JUMP, 9979)
-    tween.stop(liveid)
-    volldurchlauf=false 
-    
+    volldurchlauf=false  
     if anirestart then  anirestart=false Ani(true)  end 
 end
 
@@ -284,7 +361,7 @@ Siehe oben den Aufruf in simpleimmerWeiter().
 --]]
 function Reanimation()
 ret=false
-if anirestart and  countprimes >= ecount-24 then
+if anirestart and ecount and countprimes >= ecount-24 then
     anirestart=false
     Ani(true)
     running=true
@@ -303,14 +380,14 @@ makiert und rot ausgegeben bzw. gelöscht falls der Schiebeschalter
 "NichPrimzahlen_ Loeschen" rechts steht.
 --]]
 function animateWeiter() 
-local m=neustart() -- Neustart ermöglichen
+local m=makenext()
 if prim == 1 then gr.Y=gr.yMin end
 nextprim=m
 tween.play(liveid)
 running=true
 sposTo(prim) eposTo(nextprim)
 local duration= N <= 1000 and 0.2 or 0.1
-local id1=tween(duration,spos,epos,tween.easing.linear,markset,nextprim,1)
+local id1=tween(duration,spos,epos,tween.easing.linear,markprim,nextprim)
 local id2=nil
 local id3=tween.delay(0.1,aniFinish)
 vorheriges=m
@@ -342,7 +419,38 @@ function nextVielfaches(n)
     vorheriges = vielfaches
     vielfaches = vielfaches + n
 end
-    
+
+--[[
+Testet ob eine gerade laufende Animation fortgesetzt
+werden soll, oder auf Nutzeranforderung (siehe oben aniAbort) 
+eine unanimierte Zwischenphase eingelegt werden soll. 
+Die Nutzeranforderung ist durch den Wert aniaborted=true 
+signalisiert. Es gibt im Info-Bereich eine vertikal mittlere 
+Zone, in die der Nutzer tippen kann, um diesen Wert zu setzen.
+Ein Returnwert true signalisiert der aufrufenden Funktion die 
+Fortsetzung der Animation. Ansonsten wird die unanimierte 
+Funktion exe aufgerufen. Die aufgerufende Funktion muss sich in
+diesem Fall selbst beenden (z.B mittels return).
+
+In jetzigen Version(02.04.2018) wird allerdings ein 
+kurzes Endstück(24 Primzahlen) des Siebens reanimiert gezeigt.
+Man kann dadurch eine zeitlich lange Animationphase überspringen.
+Vergleiche dazu die function Reanimation().
+--]]
+function aniContinue(exe,arg)
+local continue=true
+if Animation and aniaborted then 
+        running=false Ani(false)
+        aniaborted=false 
+        anirestart=true -- signalisiert einen gewünschten Übergang
+                        -- in die Animation in der Endphase des Siebens
+        tween.stop(liveid)
+        return exe(arg) -- exe gibt nil zurück
+end
+-- signalisiert der aufrufenden Animations-Funktion sich selbst fortzusetzen
+return continue -- Als Fortsetzung kommt eine Animation
+end
+   
 --[[
 Animation der Behandlung der Vielfachen.
 --]]   
@@ -369,7 +477,7 @@ end
 Endphase des Siebens animiert abarbeiten, in der keine Vielfachen mehr 
 gestrichen werden müssen.
 Wird aufgerufen in einem Zustand des Siebes in dem feststeht, dass alle noch nicht
-behandelten Zahlen Primzahlen sind. Zum Anfang wird mittels ECount("a") eine 
+behandelten Zahlen Primzahlen sind. Zum Anfang wird mittels ECount() eine 
 Vorhersage für die finale Anzahl der Primzahlen erstellt.
 Zustand des Siebes bedeutet: Gesamtheit aller Werte der Tabelle SE + Werte von N und prim.
 Nach dem Ablauf dieser Funktion hat das Sieb seinen stabilen Endzustand erreicht. 
@@ -378,10 +486,11 @@ Alle Primzahlen sind entdeckt, alle zusammengesetzten Zahlen ebenfalls.
 function animateimmerWeiter() -- Mit Animation
 if Animation and not running then return end
 nextprim=makenext()
-if nextprim <= 0 then 
+if nextprim > N then 
 running=false 
 volldurchlauf=false
 fertig=true 
+makenext=createMakenext(nextprim)
 moveLiverectToMiddle()
 sound(SOUND_JUMP, 9979)
 testWolfram(N,pr(countprimes))     
@@ -391,11 +500,11 @@ if gr.Y < gr.yMax then scrollGridunten() end
 tween.stop(liveid)
 return
 end 
-ECount("a")
+ECount()
 if not aniContinue(simpleimmerWeiter) then return end
 tween.play(liveid)
 sposTo(prim) eposTo(nextprim) 
-local id1=tween(0.1,spos,epos,tween.easing.linear,markset,nextprim,1) -- nextprim als prim einstufen
+local id1=tween(0.1,spos,epos,tween.easing.linear,markprim,nextprim) -- nextprim als prim einstufen
 local id2=tween.delay(0.01,animateimmerWeiter)
 local id3=tween.delay(0.01,aniFinish)
 return tween.sequence(id1,id2,id3)  -- hopefully a proper tail call 

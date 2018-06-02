@@ -9,9 +9,14 @@
 		<string>Grid</string>
 		<string>Info</string>
 		<string>Main</string>
+		<string>Presentation</string>
 		<string>PrimeTweens</string>
+		<string>Sieb</string>
+		<string>StartupScreen</string>
 	</array>
 	<key>Description</key>
 	<string>No description available</string>
+	<key>Icon</key>
+	<string>Icon.png</string>
 </dict>
 </plist>

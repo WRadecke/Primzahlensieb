@@ -56,11 +56,12 @@ gstr=""
 ------------------------------------
 ich=readImage("Dropbox:ich")
 ichich=readImage("Dropbox:ich3")
+eulerwr=readImage("Dropbox:eulerwr")
+euler4=readImage("Dropbox:euler4")
 defineColorTables()
 time=0
 timekeeping=false
 timetext=""
-testtext=""
 N=310
 BI=749 -- fester rechter Rand des Info-Bereichs
 countprimes=0
@@ -80,7 +81,11 @@ wP,hP=PCell()
 yTop=0      
 strokeWidth(2)
 volldurchlauf=false
---------------------------------------------------------------
+--[[ ------------------------------------------------------------
+Ein closure für alle "Bit-Funktionen", Kapsel die benutzen
+konstanten "Bits", die danach nicht mehr explizit im Code
+auftauchen müssen.
+--]]
 local function allBitFuncs()
 local initbit=0x2FFFFFFFFFFFFFFF
 local clearbits=~(3<<60)
@@ -102,8 +107,9 @@ end
 setm,initBit,pr,isTwinAt,m,isPrim,isTwin=unpack(allBitFuncs())
 --------------------------------------------------------------
 
-CI=clrindextwin
 reset()
+
+CI=clrindextwin
 spos={x=X(1),Y(1)}
 epos={x=X(1),y=Y(1)}
 parameter.boolean("Farbschema",false,setFS)
@@ -116,15 +122,14 @@ parameter.boolean("Animation",true,Ani)
 parameter.boolean("zwillinge",true,Zwillis)
 parameter.watch("prim_countprimes")
 parameter.watch("vielfaches")
-pasteboard.copy("setShowSpiralPrimes(false)") --"gm{ip=1000,ani=true}")
-
+pasteboard.copy("gm{ip=1000,ani=true}")
+N=readProjectData("sievesize",310);setN(N)
+makenext=createMakenext(1)
 makeLiveTweens()
 liveid=tween(lt[1],lt.spos,lt.epos,lt.opts)  
 tween.stop(liveid)
-
-testWolfram,wolframTbl=getTailCompare() -- Test auf Übereinstimmung von einem Ende von pt mit 
-                                        -- einer entsprechenden Tabelle aus der WOLFRAM CLOUD
-
+testWolfram,wolframTbl,compareResult=createTailCompare() -- Test auf Übereinstimmung von einem Ende von pt mit 
+                                                         -- einer entsprechenden Tabelle aus der WOLFRAM CLOUD
 -- Ein Tip aus codea.io: sehr nützlich ---------------------------------------------------
 local update,noop = tween.update,function() end
 tween.pauseAll = function()
@@ -138,7 +143,7 @@ W=WIDTH
 H=HEIGHT
 ss=setN -- merke: ss = sieve size; ss ist leichter im control panel zu schreiben als setN
 local startupfuncs=createStartupScreen()
-ssp,ssups,pivot,sdt=unpack(startupfuncs,1,4) -- config-fuctions to call from control-panel
+ssp,ssups,pivot,std=unpack(startupfuncs,1,4) -- config-fuctions to call from control-panel
 tweenSplash,drawSplash,splashRunning,splashEnd=unpack(startupfuncs,5,8) -- working-functions
 tweenSplash() -- StartupScreen (eventuell- falls configuriert - ) starten.
 end
@@ -201,14 +206,18 @@ end
 Obergrenze des zu siebenden Zahlenbereichs auf den Wert von k setzen.
 Wird auch von aussen aufgerufen durch eine interaktive Eingabe der Form:
 "setN(299)" (299 als Beispiel) im linken Bildschirmstreifen (side bar) des 
-laufenden Programms. Setzt praktisch die Siebgröße auf maximal 10 Millionen.
+laufenden Programms. Beschränkt praktisch die Siebgröße auf maximal 10 Millionen.
 --]]
-function setN(k)
+function setN(k,save)
 k = k <= 9999999 and k or 9999999
 N=math.floor(k)
+makenext=createMakenext(1)
 reset()
+if save then
+saveProjectData("sievesize",N)       
 end
--- function splashEnd() splashrunning=false end 
+end
+
 --[[
 switching timekeeping on/off
 --]]
@@ -323,9 +332,9 @@ Die Benutzung von ecount ist algorithmisch entbehrlich und
 zeigt nur dem Benutzer in der Überschrift der Primzahlliste,
 dass sich das Sieb in der Endphase befindet.
 --]]
-function ECount(a)
-local f,n   -- Bedeutung: first,next
-if a then f,n = pr(#pt-1),prim  else f,n = prim,makenext() end
+function ECount()
+if ecount then return end
+local f,n = pr(#pt-1),prim -- Bedeutung: first,next
 if f*f <= N and n*n > N then
     ecount=eCount() -- eCount() soll nur ein einziges Mal aufgerufen werden.
     ecount = ecount + countprimes  -- jetzt ist ecount Vorhersage für countprimes  
@@ -363,8 +372,8 @@ in das Hauptfenster.
 function draw() 
 background(clr(a.bg))
 if splashRunning() then 
-    drawSplash(showprimes) -- showprimes)  -- StartupScreen zeigen   
-else                  -- Normale "Arbeitsoberfläche" zeigen.
+    drawSplash()   -- StartupScreen zeigen   
+else               -- Normale "Arbeitsoberfläche" zeigen.
     drawTip()
     drawGrid()
     drawSE()
@@ -400,47 +409,6 @@ end
 end
 
 --[[
-Testet ob eine gerade laufende Animation fortgesetzt
-werden soll, oder auf Nutzeranforderung (siehe oben aniAbort) 
-eine unanimierte Zwischenphase eingelegt werden soll. 
-Die Nutzeranforderung ist durch den Wert aniaborted=true 
-signalisiert. Es gibt im Info-Bereich eine vertikal mittlere 
-Zone, in die der Nutzer tippen kann, um diesen Wert zu setzen.
-Ein Returnwert true signalisiert der aufrufenden Funktion die 
-Fortsetzung der Animation. Ansonsten wird die unanimierte 
-Funktion exe aufgerufen. Die aufgerufende Funktion muss sich in
-diesem Fall selbst beenden (z.B mittels return).
-
-In jetzigen Version(02.04.2018) wird allerdings ein 
-kurzes Endstück(24 Primzahlen) des Siebens reanimiert gezeigt.
-Man kann dadurch eine zeitlich lange Animationphase überspringen.
-Vergleiche dazu die function Reanimation().
---]]
-function aniContinue(exe,arg)
-local continue=true
-if Animation and aniaborted then 
-        running=false Ani(false)
-        aniaborted=false 
-        anirestart=true -- signalisiert einen gewünschten Übergang
-                        -- in die Animation in der Endphase des Siebens
-        tween.stop(liveid)
-        return exe(arg) -- exe gibt nil zurück
-end
--- signalisiert der aufrufenden Animations-Funktion sich selbst fortzusetzen
-return continue -- Als Fortsetzung kommt eine Animation
-end
-
---[[
-Neustart ermöglichen nach einem vollständigen Siebdurchlauf.
---]]
-function  neustart()
-local m=makenext()
-local vd=volldurchlauf
-if m==0 then  reset() volldurchlauf=vd m=makenext() end
-return m
-end
-
---[[
 Aufruf an Ende einer Animation mittels des tween-Systems
 --]]
 function aniFinish()
@@ -451,7 +419,7 @@ end
 Unterbrechung und weitermachen ermöglichen
 --]]
 function unterbrechung()
-local dm=volldurchlauf
+--local dm=volldurchlauf
 if Animation and running then 
     tween.resetAll()
     if pause then PauseResume() end
@@ -470,5 +438,3 @@ function abbruch()
 tween.stop(liveid) tween.resetAll() reset()    
 end
 -- Ende Hilfsfunktionen ----------------------------------------
-
-

@@ -41,7 +41,7 @@ colortables=
  ,color(0,255,0)            -- [9] für LiveLine
  ,color(255, 210, 0, 255)   -- [10] für Liverect fill
  ,color(0,255,0)            -- [11] für Liverectborder
- ,color(255,255,255)        -- [12] für Live-Ellipse fill
+ ,color(255,255,255)        -- [12] für Live-Ellipse fill;
  ,color(0,0,0)              -- [13] für Live-Ellipse Rand
  ,color(0,0,0)              -- [14] für Live-Primzahl-Anzeige
  ,color(0,255,0)            -- [15] für Primzahlen im Info-Bereich
@@ -189,6 +189,7 @@ angezeigt werden.
   Position derzuletzt gefundenen Primzahl stehen
 --]]
 function drawspos()
+--if not spos or not spos.y or not spos.x then print("#") return end
 local yy = gr.Y-spos.y
 if  yy < 0 or yy >= HEIGHT  then return end
 pushStyle()
@@ -271,13 +272,14 @@ Ergebnis eines WOLFRAM-Tests ausgeben.
 vgl. testWolfram(...)
 --]]
 function drawTestText()
-if WIDTH <= BI or testtext=="" then return end  
+    local txt=compareResult()
+if WIDTH <= BI or txt=="" then return end  
 pushStyle()
 FONT()
 fill(clr(a.infotext))
 textMode(CENTER)
 fontSize(fntsize)
-text(testtext,(BI+WIDTH)/2,HEIGHT-1-hCell-hCell/2)
+text(txt,(BI+WIDTH)/2,HEIGHT-1-hCell-hCell/2)
 popStyle() 
 end
 
@@ -377,8 +379,8 @@ for i=1,#factors do decs[i] = 1 + math.floor(math.log10(factors[i])) end
 for i=1,#decs do  if decs[i] > l then l=decs[i] end end 
 -- Texte bis zur maximalen Stellenzahl mit führenden Leerzeichen auffüllen.
 for i=1,#factors do s=math.floor(l-decs[i]); txt[i] = string.rep(" ",s)..factors[i]  end
-txt1=tostring(tbl.multi).." = "..txt[1].." * "..txt[2] 
-if #factors==4 then txt2=tostring(tbl.multi).." = "..txt[3].." * "..txt[4] end
+txt1=table.concat{tbl.multi," = ",txt[1]," * ",txt[2]} 
+if #factors==4 then txt2=table.concat{tbl.multi," = ",txt[3]," * ",txt[4]} end
 -- Falls beide Texte erscheinen, sind die Produkte passend übereinander ausgerichtet.
 if txt1 ~= "" then text(txt1,(BI+WIDTH)/2,hCell/2) end
 if txt2 ~= "" then text(txt2,(BI+WIDTH)/2,hCell+hCell/2) end
@@ -388,18 +390,20 @@ end
 
 
 --[[
-Ein closure für die Durchführung des Wolframtest.
-Diese Funktion gibt eine anonyme function (N,last) zurück.
-Diese anonyme Funktion hat Zugriff auf die localen Objekte 
-von getTailCompare() insbesondere auf die 6 dort kodierten 
+Ein closure für die Durchführung des Wolframtest. Diese
+Funktion gibt 3 anonyme Funktionen zurück Eine davon ist
+function (N,last) Die hat Zugriff auf die localen Objekte 
+von createTailCompare() insbesondere auf die 6 dort kodierten 
 Primzahltabellen Das ist eine nützliche lua-Eigenschaft.
-Die Funktion getTailCompare wird einmalig in setup() aufgerufen.
-der Aufruf dort lautet testWolfram=getTailCompare(). Das Objekt
-testWolfram ist dann eine Funktion. Am Ende eines Siebvorgangs 
-erfolgt dann ein Aufruf der Form testWolfram(), durch den dann ein 
-Wolframtest ausgeführt wird.
+Die Funktion createTailCompare wird einmalig in setup() aufgerufen.
+Der Aufruf dort lautet:
+testWolfram,wolframTbl,compareText=createTailCompare().
+Am Ende eines Siebvorgangs erfolgt dann ein Aufruf der Form testWolfram(), 
+durch den dann ein Wolframtest ausgeführt wird. 
+compareText wird zur Darstellung des Ergenisses des Tests aufgerufen.
+wolframTbl wird im StartupScreen aufgerufen.
 --]]
-function getTailCompare() 
+function createTailCompare()
 --[[
 Die sechs folgenden Primzahltabellen stammen aus der WOLFRAM CLOUD. 
 Es sind jeweils die letzten 100 Primzahlen der Siebvorgänge für die Fälle 
@@ -487,45 +491,51 @@ local wolfram =
 9999943,9999971,9999973,9999991
 }
 }
+local testText=""
 --------------------------------------------------------------------------------------------------------
 -- Die folgende anonyme Funktion führt den Wolframtest wirklich aus, allerdings nicht hier , denn sie
 -- ist hier nur der Wert den getTailCompare()  zurück gibt.
-return function (N,last) -- N sollte die aktuelle Siebgröße sein; last die letzte gefundene Primzahl.
+return function (N,last) -- testWolfram: N sollte die aktuelle Siebgröße sein; last die letzte gefundene Primzahl.
     -- Gibt seit 19.04.2018 keinen Returnwert zurück.
     -- Setzt stattdessen den resultierenden Testtext in der globalen Variablen testtext.
     local ptbl,l=nil,0
-    -- Vergleichstabelle mit Primärschlüssel suchen N ist aktuelle Siebgröße
-    for i=1,#aw do 
-    if aw[i].N==N then ptbl=wolfram[i] ; l = #ptbl break end 
+    if N <= 1000 then 
+        ptbl=wolfram[1]; l=#pt
+    else
+        -- Vergleichstabelle mit Primärschlüssel suchen N ist aktuelle Siebgröße
+        for i=1,#aw do 
+            if aw[i].N==N then ptbl=wolfram[i] ; l = #ptbl break end 
+        end
+        if not ptbl then
+            -- Vergleichstabelle mit Sekundärschlüssel suchen
+            for i=1,#aw do  
+                if aw[i].last==last then ptbl=wolfram[i] ; l = #ptbl break end 
+            end
+        end
     end
-    if not ptbl then
-    -- Vergleichstabelle mit Sekundärschlüssel suchen
-    for i=1,#aw do  
-    if aw[i].last==last then ptbl=wolfram[i] ; l = #ptbl break end 
-    end
-    end
-    if ptbl then   -- passende wolfram-table gefunden
+    if ptbl then   -- passende wolfram-table gefunden 
         local f = 0
-        local start=#pt-#ptbl+1
+        local start=#pt-l+1
         for i=start,#pt 
         do  -- compare entries in wolfram-table ptbl with last entries in our primetable pt
             if ptbl[i-start+1] ~= pr(i)
             then 
-            testtext="Fehler "..tostring(i).." , "..tostring(ptbl[f-start+1]).." , "..tostring(pr(i))
+            testText=table.concat{"Fehler ",i," , ",ptbl[i-start+1]," , ",pr(i) }
             return
             end 
         end
-        testtext="Letzten "..l.." von "..tostring(#pt).." OK" return           
+        testText=table.concat{"Letzten ",l," von ",#pt," OK"} return           
     else 
-        testtext="Keine Vergleichstabelle gefunden" return 
+        testText="Keine Vergleichstabelle gefunden" return 
     end
     end,
-    function (i) return wolfram[i] end -- gibt eine der tables zurück
+    function (i) return wolfram[i] end, -- wolframTbl:  Gibt eine der tables zurück
+    function () return testText    end  -- compareText: Gibt den resultierenden Text des Vergleiches zurück          
 end
 
 TimedMessage=class() -- Nutzung im Inspektionsmodus
 --[[
-Zeigt eine Textmitteilung tdelta Sekunden lang.
+Zeigt eine Textmitteilung tdelta Sekunden lang an.
 Die Nutzung erfolgt hier durch zwei Objekte gTM,iTM
 der Klasse, die zuständig sind für das Gitter bzw. die
 Primzahltabelle. Die Textmitteilung besteht hier in der
