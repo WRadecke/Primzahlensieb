@@ -13,12 +13,13 @@ function touched(touch)
         scrollInfo(touch) -- Finger bewegen im rechten Info-Bereich ganz oben auch horizontal
     end
     if touch.state == ENDED then 
-        if touch.tapCount==1 then -- Reaktion auf ein "tap"="tippen"
-            if splashRunning() then  splashEnd() return end -- "Spirale" beenden.
+        if touch.tapCount==1 then   -- Reaktion auf ein "tap"="tippen"
+            if su.splashRunning() then  su.splashEnd() return end -- "Spirale" beenden.
+            su.tap(touch)           -- Spiralmuster wechseln
             local tapfun  = tap1 and tap1Grid or tapGrid
-            tapfun(touch)
+            tapfun(touch)           -- tippen ins Zahlengitter behandeln
             local tapIfun = tap1 and tap1Info or tapInfo
-            tapIfun(touch)
+            tapIfun(touch)          -- tippen in Info/InfoExt-Bereich behandeln
         end
     end  
 end
@@ -149,7 +150,7 @@ CI = zwillinge and clrindextwin or clrindexnorm
 end
 
 function updateTitle()
-Title="Sieb des Eratosthenes("..math.floor(N)..")"   
+Title=table.concat{"Sieb des Eratosthenes(",math.tointeger(N),")"}   
 end
 
 --[[
@@ -252,57 +253,78 @@ end
 end
 
 --[[
-Textausgabe vom Ergebnis einer Zeitmessung.
-Gemessen wird die Laufzeit des Siebvorgangs.
---]]
-function drawTimeText()
-if timekeeping and WIDTH > BI then
-pushStyle()
-FONT()
-fill(clr(a.infotext))
-textMode(CENTER)
-fontSize(fntsize)
-text(timetext,(BI+WIDTH)/2,HEIGHT-1-hCell/2)
-popStyle()        
-end
-end
-
---[[
 Ergebnis eines WOLFRAM-Tests ausgeben.
 vgl. testWolfram(...)
 --]]
 function drawTestText()
-    local txt=compareResult()
+    local txt=wr.compareResult()
 if WIDTH <= BI or txt=="" then return end  
 pushStyle()
 FONT()
 fill(clr(a.infotext))
 textMode(CENTER)
-fontSize(fntsize)
+fontSize(14)
 text(txt,(BI+WIDTH)/2,HEIGHT-1-hCell-hCell/2)
 popStyle() 
+end
+
+--- Ausgabefunktionen für Bereich InfoExt -------------------------
+--[[
+Bedienfeld für Spiralmuster-Auswahl
+im Bereich InfoExt anzeigen
+--]]
+function drawSpiralMuster(i)
+if BI >= WIDTH then return end
+local WR=1024
+assert(0<=i and i<=4)
+pushStyle()
+rectMode(CENTER)
+strokeWidth(2)
+noFill()
+stroke(clr(a.infotext))
+local x,y=(BI+WR)/2,(yTop+yThirdTop)/2
+rect(x,y,168,168)
+fill(clr(a.infotext))
+textSize(14)
+text("Spiralmuster",x, y+94)
+textSize(40)
+xl,xr=(BI+x-84)/2,(WR+x+84)/2
+text("⬅️",xl,(yThirdTop+yTop)/2)
+text("➡️",xr,(yThirdTop+yTop)/2)
+if i < 1 or i > 4 then return end
+if WIDTH > BI then
+clip(x-80,y-80,160,160)
+sprite(spirales[i],x,y,160) 
+c=clr(a.bg)
+fill(c.r,c.g,c.b,100)
+noStroke()  
+rect(x,y,160,160) 
+clip()
+end
+popStyle()
 end
 
 function drawTip()
 pushStyle()
 stroke(clr(a.liveline))
 strokeWidth(5)
--- Pfeil nach links -----------------------
-line(BI,yThirdMiddle, BI+50,yThirdMiddle)
-line(BI,yThirdMiddle,BI+20,yThirdMiddle+6)
-line(BI,yThirdMiddle,BI+20,yThirdMiddle-6)
---Text-------------------------------------
+local WR=1024
+local xcenter,ycenter=(BI+WR)/2,yThirdMiddle
+local tipText= [[Tippe hier links, um eine Animation zu beschleunigen. 
+Es wird eine unanimierte Zwischenphase eingelegt.]]
 textMode(CENTER)
 textWrapWidth(200)
 FONT()
 fontSize(18)
-fill(clr(a.infotext))
-tipText= [[Tippe hier links, um eine Animation zu beschleunigen. 
-Es wird eine unanimierte Zwischenphase eingelegt.]]
-
--- Rahmen um Text --------------------------
 local wtip,htip = textSize(tipText)
-local xcenter,ycenter=BI+50+wtip/2+10,yThirdMiddle
+-- Rahmen um Text --------------------------
+
+-- Pfeil nach links -----------------------
+line(BI,yThirdMiddle, xcenter-wtip/2-10,yThirdMiddle)
+line(BI,yThirdMiddle,BI+14,yThirdMiddle+6)
+line(BI,yThirdMiddle,BI+14,yThirdMiddle-6)
+--Text-------------------------------------
+fill(clr(a.infotext))
 text(tipText,xcenter,ycenter)
 rectMode(RADIUS)
 noFill()
@@ -325,7 +347,7 @@ Zeichnet eine Textdarstellung des aktuellen Inhalts von navi
 --]]
 function drawNavi(xl,yl,xr,yr)
 pushStyle()  
-local txt,nw,nh,fntsize=naviText()
+local txt,nw,nh,fntsize=nv.naviText()
 FONT()
 fontSize(fntsize)
 fill(clr(a.liveline))
@@ -334,6 +356,7 @@ textMode(CENTER)
 text(txt,(xr+xl)/2,yl-hiT/2)   
 popStyle() 
 end
+
 --[[
 Über dem "Tiprechteck":
 Blauen "Tropfen" links/rechts positionieren um
@@ -343,54 +366,16 @@ function drawTK(xl,yl,xr,yr)
 pushStyle()
 fill(clr(a.multi))
 fontSize(fntsize)
-textMode(CORNER)if timekeeping then text("💧",xr-2*wsT,yr)else text("💧",xl,yl) end
+textMode(CORNER)
+if tk.isactive() then text("💧",xr-2*wsT,yr)else text("💧",xl,yl) end
 textMode(CENTER)
 fill(clr(a.infotext))
 text("-off timekeeping on-",(xr+xl)/2,yl+hiT/2)
 popStyle()
 end
-
+-- Ende Ausgabefunktionen für Bereich InfoExt --------------------------
 --[[
-Generiert die unteren Texte in InfoExt-Bereich
---]]
-function drawNaviText(tbl)
-pushStyle()
-fontSize(18)  
-FONT()  
-fill(clr(a.infotext))
-textMode(CENTER)
-local factors,decs,txt={},{},{} 
-local txt1,txt2="",""
-if WIDTH > BI then  
-if tbl.prim > 1 and tbl.ld==1 and tbl.multi==1 then 
-    txt1=tostring(tbl.prim).." ist "..findindex(tbl.prim)..". Primzahl"
-    text(txt1,(BI+WIDTH)/2,hCell/2)
-    return
-end
-if tbl.prim <= 1 or tbl.ld <= 1 or tbl.multi <= 1 then return end        
-factors[1],factors[2] = tbl.ld,math.floor(tbl.multi/tbl.ld)     
-if tbl.prim ~= tbl.ld then 
-factors[3],factors[4] = tbl.prim,math.floor(tbl.multi/tbl.prim)
-end
-        
-local l,s = 0,0
--- Anzahl der Dezimalstellen der Faktoren und deren Maximum l bestimmen
-for i=1,#factors do decs[i] = 1 + math.floor(math.log10(factors[i])) end
-for i=1,#decs do  if decs[i] > l then l=decs[i] end end 
--- Texte bis zur maximalen Stellenzahl mit führenden Leerzeichen auffüllen.
-for i=1,#factors do s=math.floor(l-decs[i]); txt[i] = string.rep(" ",s)..factors[i]  end
-txt1=table.concat{tbl.multi," = ",txt[1]," * ",txt[2]} 
-if #factors==4 then txt2=table.concat{tbl.multi," = ",txt[3]," * ",txt[4]} end
--- Falls beide Texte erscheinen, sind die Produkte passend übereinander ausgerichtet.
-if txt1 ~= "" then text(txt1,(BI+WIDTH)/2,hCell/2) end
-if txt2 ~= "" then text(txt2,(BI+WIDTH)/2,hCell+hCell/2) end
-popStyle()
-end
-end
-
-
---[[
-Ein closure für die Durchführung des Wolframtest. Diese
+Eine closure-Fabrik für die Durchführung des Wolframtest. Diese
 Funktion gibt 3 anonyme Funktionen zurück Eine davon ist
 function (N,last) Die hat Zugriff auf die localen Objekte 
 von createTailCompare() insbesondere auf die 6 dort kodierten 
@@ -493,9 +478,11 @@ local wolfram =
 }
 local testText=""
 --------------------------------------------------------------------------------------------------------
--- Die folgende anonyme Funktion führt den Wolframtest wirklich aus, allerdings nicht hier , denn sie
+-- Die folgende  Funktion führt den Wolframtest wirklich aus, allerdings nicht hier , denn sie
 -- ist hier nur der Wert den getTailCompare()  zurück gibt.
-return function (N,last) -- testWolfram: N sollte die aktuelle Siebgröße sein; last die letzte gefundene Primzahl.
+return 
+{
+ testWolfram=function (N,last) -- testWolfram: N aktuelle Siebgröße sein; last letzte gefundene Primzahl.
     -- Gibt seit 19.04.2018 keinen Returnwert zurück.
     -- Setzt stattdessen den resultierenden Testtext in der globalen Variablen testtext.
     local ptbl,l=nil,0
@@ -529,8 +516,9 @@ return function (N,last) -- testWolfram: N sollte die aktuelle Siebgröße sein;
         testText="Keine Vergleichstabelle gefunden" return 
     end
     end,
-    function (i) return wolfram[i] end, -- wolframTbl:  Gibt eine der tables zurück
-    function () return testText    end  -- compareText: Gibt den resultierenden Text des Vergleiches zurück          
+    wolframTbl=function (i) return wolfram[i] end,    -- wolframTbl:  Gibt eine der tables zurück
+    compareResult=function () return testText    end  -- compareText: resultierenden Text zurück geben  
+}      
 end
 
 TimedMessage=class() -- Nutzung im Inspektionsmodus
