@@ -10,6 +10,68 @@
 --]]
 
 --[[
+Eine closure-Fabrik für ein Set von 6 Variablen.
+Das Set gibt es in zweifacher Ausführung:
+ic[1] für N  < 1000000, fontSize(14)
+ic[2] für N >= 1000000, fontSize(12)
+Die closure-Fabrik gibt 2 Funktionen zurück:
+1. return function (n) benannt IC: 
+   Liefert das passende Variablen-Set für Siebgröße n zurück,
+   die werden global durch Funktionen in Info.lua genutzt.
+2. return function ( ): benannt inforeset
+   Setzt Variablen für die Erfassung der Primzahlen in der
+   Primzahlenliste pt im Siebalgorithmus zurück für einen Neustart.
+--]]
+function prepareInfoComponents()
+    -- von N unabhängige Werte-------------------------------
+    BI=749          -- fester rechter Rand des Info-Bereichs
+    pt={}
+    tap1=false      -- für Inspektionsmodus
+    countprimes=0
+    twinpairs=0
+    ecount=nil
+    pushStyle()
+    -- von N grob abhängige Werte: ---------------------------
+    -- zwei Varianten für N < 1000000, N >= 1000000
+    local wi,hi,ws,y,ifs,ff=1,1,1,1,1,6
+    local _
+    FONT()
+    ifs=14
+    fontSize(ifs)
+    wi,hi=textSize("1111111")  -- 7 Einsen: wi,hi sind  globale Breite,Höhe der Texte im Infobereich
+    ws,_=textSize("1")         -- Ein Leerzeichen am Anfang jeder Zeile in der Primzahlliste
+    y=HEIGHT-1-hCell-3*hi
+    local ic={{wi,hi,ws,y,ifs,ff}}
+    ifs=12
+    ff=7
+    fontSize(ifs)
+    wi,hi=textSize("11111111") -- 8 Einsen
+    ws,_=textSize("1")         
+    y=HEIGHT-1-hCell-3*hi
+    ic[2]={wi,hi,ws,y,ifs,ff}
+    --[[
+    Eine Version der InfoComponents muß schon mal veröffentlicht
+    werden, bevor createInfoScrollrange funktioniert.
+    --]]
+    wiT,hiT,wsT,yTop,fntsize,ff=unpack(ic[N >= 1000000 and 2 or 1])
+    createInfoScrollrange()
+    return 
+    {
+        IC=function (n) -- variable InfoComponents abholen (zum Aufruf von außen: getIC)
+        return unpack(ic[n >= 1000000 and 2 or 1])
+        end,
+        inforeset=function () --inforeset
+        pt={}
+        countprimes=0                -- aktuelle Anzahl der gefundenen Primzahlen
+        twinpairs=0
+        ecount=nil
+        tap1=false
+        prim_countprimes=table.concat{tostring(prim)," / ",countprimes}   
+        end
+    }
+end
+
+--[[
 Anhängen einer neuen gefundenen Primzahl n an die Tabelle pt.
 In der Tabelle werden die Primzahlen und eine Kennzeichnung (gesetztes höchstes bit)
 für Primzahlzwillinge gespeichert. Die Tabelle pt ist ( seit 17.04.2018 ) eine 
@@ -44,7 +106,7 @@ local hbit=0x8000000000000000   -- beruht auf der Annahme,dass ganze Zahlen 64 b
 countprimes = countprimes + 1 
 pt[#pt+1]=n -- eine neue Primzahl n ans Ende der Liste anhängen
 prim=n
-prim_countprimes = tostring(prim).." / "..countprimes -- für einen parameter.watch(...)
+prim_countprimes = table.concat{tostring(prim)," / ",countprimes} -- für einen parameter.watch(...)
 local c=#pt
 if countprimes > 1 and pr(c)==pr(c-1)+2 then -- Behandlung von Primzahlzwillingen
     local p,q=pr(c),pr(c-1)
@@ -55,10 +117,10 @@ if countprimes > 1 and pr(c)==pr(c-1)+2 then -- Behandlung von Primzahlzwillinge
 end
     
 if ecount==countprimes then
-    adjustInfoScrollrange()
-    if timekeeping then setTimeResult() end        
+    ir:adjustRange() 
+    tk.stop()--if timekeeping then setTimeResult() end        
 end
-if (countprimes%5)==1 then adjustInfoScrollrange() end  
+if Animation and (countprimes%5)==1 then ir:adjustRange() end  
     -- Range anpassen,wenn sich die Zeilenzahl der Primzahlliste erhöht hat.      
 end
 
@@ -75,11 +137,11 @@ end
 --[[
 Textform einer Primzahl p in der Ausgabeliste.
 Führende Leerzeichen zum Erreichen eine einheitlichen
-Länge des Ausgabetextes werden erzeugt.
+Länge des Ausgabetextes werden erzeugt.Globales ff
+kommt aus globalem ic aus prepareInfoComponents()
 --]]
 function pTX(p)
 local l=math.floor(math.log10(p))+1 -- Anzahl der Dezimalstellen von p
-local ff= N >= 1000000  and 7 or 6
 local s=math.max(0,ff-l) -- s führende Leerzeichen  " " erforderlich
 -- Test ob die letzte Primzahl vorliegt oder nicht (dann Komma weglassen oder setzen).
 local tx=(countprimes==ecount and p==pr(countprimes)) and string.rep(" ",s)..p 
@@ -305,22 +367,25 @@ popStyle()
 end
 
 --[[
-Das ist enorm wichtig fürs Scrollen im rechten Info-Bereich:
-Der InfoScrollrange ir={yR=...,yMin=..., yMax=...} verwaltet:
-yR   - Die vertikale Scrollposition, die auch durch Fingerbedieinung bewegt wird.
-yMin - Die vertikale Mimimal-Lage von yR
-yMax - Die vertikale Maximal-Lage von yR 
-       (Liegt oberhalb von HEIGHT, falls überhaupt gescrollt werden muss.)
+Der InfoScrollRange ir erbt vom GridScollRange gr.
+Wichtig ist die Vererbung von enforceIntoRange(y)
+Die hier eingehenden globalen Variablen yTop,hiT
+gibt es in zwei Versionen je nach Wert von Siebgröße
+N < 1000000, N >= 1000000. Ein Update auf die passende
+Version, muss immer vor einem Aufruf von ir:adjustRange()
+erfolgen! vgl. reset()
 --]]
-function adjustInfoScrollrange()
-local y=yTop 
-ir.yMin=y; ir.yMax=ir.yMin; ir.Y=ir.yMin
+function createInfoScrollrange()
+ir=gr:new{Y=yTop,yMin=yTop,yMax=yTop,isOpen=false}
+function ir:adjustRange() -- überschreibt die Implementierung von gr:adjustRange()
+self.yMin=yTop -- Dieser Wert ist möglicherweise ein anderer als der der oben benutzt wurde
+self.yMax=yTop -- Der Unterschied ist gering, aber bemerkbar.
 local l=hiT*(2+math.ceil(countprimes/5))   -- needed place (2+ für die beiden Textzeilen ganz unten)
-local ll=hiT*(math.floor(ir.yMin/(hiT)))   -- available place
-if l > ll  then ir.yMax = ir.yMin+(l-ll) ir.yMax=math.ceil(ir.yMax/hiT)*hiT end 
-ir.Y = ir.Y > ir.yMax and ir.yMax or ir.Y
-ir.Y = ir.Y < ir.yMin and ir.yMin or ir.Y
-ir.isOpen = ir.yMin < ir.yMax and true or false
+local ll=hiT*(math.floor(ir.yMin/(hiT)))   -- available place  
+if l > ll  then self.yMax = self.yMin+(l-ll) self.yMax=math.ceil(self.yMax/hiT)*hiT end
+self.Y=self:enforceIntoRange(self.Y)
+self.isOpen = self.yMin < self.yMax    
+end
 end
 
 --[[
@@ -331,28 +396,35 @@ Bewegung ausgewertet, um die drei boolschen Schalter Animation,
 zwillinge  und tap1 zu verändern.
 --]]
 function scrollInfo(touch)
-if GB < touch.x and touch.x < WIDTH then
-    if HEIGHT-1-hCell <= touch.y and touch.y <= HEIGHT-1 then   -- Animation ändern
-    if touch.x < touch.prevX then Animation= false else Animation = true end 
-    elseif yTop <= touch.y and touch.y < HEIGHT-1-2*hiT then     -- zwillinge ändern
-            if touch.x  < touch.prevX then Zwillis(false) else Zwillis(true) end
+if GB < touch.x and touch.x <= BI then
+    if HEIGHT-1-hCell <= touch.y and touch.y <= HEIGHT-1 then  
+            if GB < touch.x and touch.x <= BI then
+                -- Animation ändern
+                Ani(touch.prevX <= touch.x)
+            end
+    elseif yTop <= touch.y and touch.y < HEIGHT-1-2*hiT then 
+            if GB < touch.x and touch.x <= BI then    
+                -- zwillinge ändern
+                Zwillis(touch.prevX <= touch.x)
+            end
     elseif yTop-2*hCell <= touch.y and touch.y < yTop then
-                                -- Inspektionmodus off/on --
-            tap1 = touch.x  >= touch.prevX and true or false
-    elseif BI< touch.x and touch.x < WIDTH and yThirdBottom <= touch.y and touch.y <= yThirdTop then
-            if touch.x  < touch.prevX then timekeeping=false else timekeeping=true end
-    elseif touch.y < yTop-2*hCell then ---------------------------------------------------- vertikal scrollen    
-        local yR,yMin,yMax=ir.Y,ir.yMin,ir.yMax
-        if yMax > yMin then         
-            local y=touch.y-touch.prevY
-            yR = yR + y
-            if yR < yMin then yR=yMin end
-            if yR > yMax then yR=yMax end
-        end
-        ir.Y=yR
+            if GB < touch.x and touch.x <= BI then
+                -- Inspektionmodus off/on --
+                tap1 = touch.x  >= touch.prevX and true or false
+            end
+    
+    elseif GB < touch.x and touch.x <= BI and touch.y < yTop-2*hCell then 
+        -- vertikal scrollen    
+        ir.Y=ir:enforceIntoRange(ir.Y+touch.y-touch.prevY)
+    end
+else
+    if yThirdBottom <= touch.y and touch.y <= yThirdTop then
+                --TimeKeeper off/on
+                tk.activate(touch.prevX <= touch.x)
     end
 end
 end
+
 
 --[[
 Tippen - mit einem Finger - in den Infobereich führt ganz nach unten
@@ -360,7 +432,7 @@ oder ganz nach oben, oder in der Live-Zeile: start/stop und Animation
 umschalten.
 --]]
 function tapInfo(touch)
-if GB+wsT < touch.x and touch.x < WIDTH then --Infobereich getroffen
+if GB+wsT < touch.x and touch.x <= BI then --Infobereich getroffen
     if HEIGHT-1-hCell <= touch.y and touch.y <= HEIGHT-1 
     then -- Live-Zeile getroffen
             --[[ 
@@ -398,7 +470,7 @@ if ecount~=countprimes then return tapInfo(touch) end
 ---------------------------------------------------------
 if GB +wsT < touch.x and touch.x <= BI then
     if HEIGHT-1-hCell <= touch.y and touch.y <= HEIGHT-1 then -- Live-Zeile getroffen
-        local p,x,wr=navi().prim,touch.x,wiT+24
+        local p,x,wr=nv.navi().prim,touch.x,wiT+24
         local xl,xr=lt.spos.x-wr,lt.spos.x+wr
         local hitleft,hitin,hitright= x < xl,(xl <= x and x <= xr),xr < x
         --[[
@@ -446,9 +518,9 @@ end
 --[[
 Animiertes Scrollen im Inspektionmodus
 --]]
-function scrollInfoAni(y,tbl) -- y  i,t:ist Scrollposition,i index in pt, t ist eine Zeitdauer
-y=y < ir.yMin and ir.yMin or y
-y=y > ir.yMax and ir.yMax or y
+function scrollInfoAni(y,tbl) 
+
+y=ir:enforceIntoRange(y)
 if tbl then 
 local  id=tween(1.0,ir,{Y=y},tween.easing.linear,iTM.Start,iTM,tbl)
 tween.play(id)
@@ -466,6 +538,7 @@ end
 Animiertes Scrollen zu einer bestimmten Position.
 --]]
 function scrollInfoAniTo(y)
+y=ir:enforceIntoRange(y)
 local  id=tween(1.0,ir,{Y=y},tween.easing.linear,playsound,{SOUND_JUMP,9979})
 tween.play(id)  
 end
@@ -480,9 +553,7 @@ vertikalen Position y. fun ist iTM.Start
 --]]
 function scrollInfoTo(y,fun,arg,tbl)
 if ir.isOpen then
-y=y < ir.yMin and ir.yMin or y
-y=y > ir.yMax and ir.yMax or y
-ir.Y=y
+ir.Y=ir:enforceIntoRange(y)
 end
 if fun and arg and tbl.tdelta and tbl.ip then
 fun(arg,tbl)        
