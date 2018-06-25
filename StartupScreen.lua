@@ -1,11 +1,11 @@
 --# StartupScreen
 
 --[[
-Ein closure für einen Startup-Screen
+Eine closure-Fabrik für einen Startup-Screen
 Es wird eine animierte Spirale gezeigt,
 auf der Primzahlen angeordnet sind.
 Hat eine table mit 8 Funktionen als Returnwerte, die
-hier anonym sind. Im setup werden sie wie folgt benannt:
+die bereits dort wie folgt benannt werden
 ssp               zeige (true/false) Primzahlen auf der Spirale
 ssups             starte (true/false) StartupScreen
 pivot             zeige (true/false) Pivotpunkt während der Animation der Spirale
@@ -43,7 +43,7 @@ for v=4*pi,16*pi,pi/8 do
     tbl[#tbl+1]={x=xx,y=yy,phi=v}        
 end
     
-local p = wolframTbl(1) -- Bereitstellung der Primzahlen
+local p = wr.wolframTbl(1) -- Bereitstellung der Primzahlen
 local point={x=0,y=0}   -- Animations-Subjekt
 local function splashEnd()
      if pause then PauseResume() end
@@ -116,29 +116,66 @@ local function interpol(p,q,n)
     end
     --]]
 end
-return -- Eine table mit 8 Funktionen wird zurückgegeben
-{      -- Es werden jeweils die im setup vergebenen Funktionsnamen als Kommentare angeschrieben.  
-function (bshow) -- ssp
-showprimes=bshow
+local function sp(bshow) 
+showprimes=bshow 
 saveProjectData("showspiralprimes", showprimes )      
-end,    
-function (bshow) -- ssups
+end   
+local function su(bshow)
 showsups=bshow
 saveProjectData("showstartupscreen",showsups)       
-end,    
-function (bshow) --pivot
+end   
+local function pv(bshow)
 showpivotpoint=bshow 
 saveProjectData("showpivotpoint",showpivotpoint)       
-end,
-function () -- std
+end
+local function std() 
 showprimes=true
 showpivotpoint=false
 showsups=true  
 saveProjectData("showspiralprimes", showprimes ) 
 saveProjectData("showstartupscreen",showsups) 
 saveProjectData("showpivotpoint",showpivotpoint)    
-end,
-function () -- tweenSplash, Animation der Spirale starten.
+end
+local function spiralindex() -- index zum aktuellen Muster der Spirale zurück geben
+local i=0
+if showsups then
+i=showprimes and 1 or 3
+i = i + (showpivotpoint and 1 or 0)
+end 
+return i
+end
+    
+--[[
+Boolean options für Spirale gemäß
+index i setzen.
+--]]    
+local function setSU(i)
+su( i > 0); sp(i <= 2 ); pv(i%2 == 0)
+end
+    
+--[[
+Spiralmuster-Index per tap ändern
+--]]    
+local function tap(touch)
+local i,right=spiralindex(),touch.x >=(BI+WIDTH)/2
+setSU(
+      (right and i < 4) and i+1 
+        or 
+      ((not right and i > 0 ) and i-1 or i)
+     )     
+end   
+
+return -- Eine table mit 8 Funktionen wird zurückgegeben
+{      -- Es werden jeweils die im setup vergebenen Funktionsnamen als Kommentare angeschrieben.  
+sp=sp,
+pv=pv,
+su=su,
+std=std,
+tap=tap,
+spiralindex=spiralindex,
+splashEnd = splashEnd, -- Animation beenden
+splashRunning=function () return running end,    -- splashRunning, Abfragen ob Animation läuft
+tweenSplash=function () -- Animation der Spirale starten.
 --[[
 point ist das Subjekt das durch die Animation - in 
 Raumzeit unsichtbar bewegt wird. Der Anfangwert von point
@@ -153,7 +190,8 @@ running=true
 tween.play(id1)
 tween.play(id2)  
 end,
-function ()       -- drawSplash, animiertes Zeichnen der Spirale
+    
+drawSplash=function ()       -- animiertes Zeichnen der Spirale
 local cc=hCell/3+2
 local w2,h2,wh=W/2,H/2,math.min(W/2,H/2+cc)
 h2=h2+cc
@@ -162,7 +200,7 @@ pushMatrix()
 local act=colortables.act
 -- ich und ichich sind Bilder meines Namenskürzels
 if act==1 then sprite(ich,W-50,50,50) else  sprite(ichich,W-50,50,50) end
-if act==1 then sprite(eulerwr,80,H-80,200,160) else sprite(euler4,80,H-80,200,160) end
+if act==1 then sprite(euler6,80,H-80,200,160) else sprite(euler5,80,H-80,200,160) end
 translate(w2,h2)    -- w2,h2 ist die Mitte (h2 nur näherungsweise)
                     -- translate verschiebt alle Koordinaten: (x,y)---> (x+w2,y+h2)
 fill(clr(2))
@@ -221,8 +259,6 @@ if showpivotpoint then
 end
 popMatrix()
 popStyle()
-end,
-function () return running end,    -- splashRunning, Abfragen ob Animation läuft
-function () return splashEnd() end -- splashEnd Animation beenden
+end
 }
 end
