@@ -45,31 +45,94 @@ aber auch "simplifiziert" in der Bedeutung einfach und schnell.
 --]]
 
 --[[
+closure-Fabrik für Zeitmessung
+--]]
+function createTimeKeeper()
+local active,completed=false,false
+local time=0.0
+local timetext=""
+local function isactive() return active end
+local function activate(a)
+    active=a; completed=false
+    timetext=""
+end 
+local function start() 
+    if active then  
+        completed=false
+        timetext=""
+        time=os.clock() 
+    end 
+end
+local function stop() 
+    if active then
+        local t=os.clock()-time
+        local prec = N < 770 and 0.00000000001 or 0.000001
+        timetext = table.concat{"time for ",math.tointeger(N)," = ",tostring(t-t%prec)," sec"}
+        completed=true
+    end 
+end
+local function draw() 
+    if completed and WIDTH > BI then
+        pushStyle()
+        FONT()
+        fill(clr(a.infotext))
+        textMode(CENTER)
+        fontSize(14)
+        text(timetext,(BI+WIDTH)/2,HEIGHT-1-hCell/2)
+        popStyle()        
+    end
+end
+return
+{
+isactive=isactive,
+activate=activate,
+start=start,
+stop=stop,
+draw=draw
+}
+end
+
+--[[
+Algorithmus-bezogene Objekte zurück setzen.
+--]]
+function algoreset()
+    initSE()
+    prim=1
+    volldurchlauf=false
+    vielfaches=1
+    vorheriges=1
+    aniaborted=false
+    anirestart=false
+    running=false   -- während eine Animation läuft ist der Wert true
+    pause=false     -- zeigt an ob eine Animation aktuell läuft (false) oder pausiert (true). 
+    fertig=false    -- = true,wenn das Sieben beendet ist.  
+end
+
+--[[
 Die lua-Table SE ist "der! Zustand" des Siebes während der Algorithmus läuft. Sie wird hier
 initialisiert. SE hat die Form {s1,s2,...,sN}: Für jede Zahl i in 1,2,...,N ist der 
-aktuelle Bearbeitungszustand si von i vermerkt. 
+aktuelle Bearbeitungszustand si von i vermerkt. (vgl. Änderung 25.04.2018 unten).
 "der! Zustand" betont die Wichtigkeit des Zustandes für den Siebvorgang. Ohne eine solche
 oder ähnliche Struktur kann man das Sieb des Eratosthenes nicht realisieren.
 Für jede zu siebende Zahl i ist ein Individualzustand si in SE gespeichert. Dabei bedeutet:
 si=0 - Als Nichtprimzahl eingestuft. Nichtprimzahlen sind 1 und alle zusammengesetzten Zahlen.
 si=1 - Als Primzahl eingestuft.
 si=2 - Noch nicht hinsichtlich prim/nichtprim behandelt.
-si=3 - Ist als Mitglied eines Zwillingspaars erkannt, und wird eventuell farblich anders dargestellt.
 25.04.2018: Die Werte 0,1,2,3 werden neuerdings in "oberen Bits" gespeichert, an "unteren Bits" 
 werden im Verlauf des Sieben der kleinste echte Teiler einer Zahl gespeichert, sofern diese 
 sich nicht als Primzahl herausstellt. Diese Teiler werden im Inspektionsmodus auf Nutzeranforderung
 visuell präsentiert.
 Ein Zugriff auf auf den Zustand einer Zahl n in SE für die Ausgabe im Gitter
-erfolgt einfach mittels m(n) wobei m(n) ein Zustand aus {0,1,2,3} ist. Die Funktion m "weiß"
-wohin in den hohen Bits von SE(n) sie den Zustand dekodieren muss.
+erfolgt einfach mittels m(n) wobei m(n) ein Zustand aus {0,1,2} ist. Die Funktion m "weiß"
+woher in den hohen Bits von SE(n) sie den Zustand dekodieren muss.
 
 Die Zahlen n in {1,2,...,N} sind nicht in SE oder seinen Elementen gespeichert, sondern werden
 durch Schleifenvariable oder Einzelangaben in den Algorithmus eingebracht. Man kann natürlich 
 auch argumentieren, dass jede lua-table sowohl ihre Schlüssel als auch die zugehörigen Werte 
 verwaltet. Insofern verwaltet SE auch die zu siebenden Zahlen 1,...,N - als Schlüssel.
 
-Das Triple N,prim,SE ist sehr wichtig für den Ablauf des Siebens.Durch initSE() wird der einen erneuten Durchlauf
-Startzustand hergestellt.
+Das Triple <N,prim,SE > ist sehr wichtig für den Ablauf des Siebens.Durch initSE() wird der 
+für inen erneuten Durchlauf nötigen Startzustand hergestellt.
 Das Sieb (hier als Kurzbegriff des Algorithmus's) ist dringend darauf angewiesen, dass der
 Zustand im Verlauf des Siebens korrekt und insbesondere in der richtigen Reihenfolge 
 bearbeitet wird. Primzahlen werden in wachsender Reihenfolge und ohne Auslassungen gefunden,
@@ -86,10 +149,10 @@ for i=2,N do  SE[i]=initbit end
 end
 
 --[[ 
-Ein closure für makenext. Diese Funktion
-(eine Objektfabrik) muss bei jeder Änderung von N 
-erneut in der Form makenext=createMakenext() aufgerufen
-werden, um den Zustand act=1 zu erreichen.
+Eine closure-Fabrik für makenext. Diese Funktion muss 
+bei jeder Änderung von N erneut in der Form 
+makenext=createMakenext() aufgerufen werden, 
+um den Zustand act=1 zu erreichen.
 Dies geschieht in function setN(...) in Main.lua.
 makenext ist der Iterator durch den Zahlenurwald der
 von einer zur nächsten Primzahl findet. Er würde nicht
@@ -106,10 +169,10 @@ n=makenext() aufgerufen. Nach einem vollständigen
 Siebdurchlauf ebenfalls, wobei makenext automatisch
 von vorn beginnt - einschließlich Neu-Initialisierung 
 aller erforderlichen Objekte mittels reset(). Die
-Objektfabrik createMakenext() wird hier in ziemlich
+closure-Fabrik createMakenext() wird hier in ziemlich
 besonderer Weise aufgerufen: Ein Aufruf erfolgt aus dem 
 Inneren der Return-Funktion mit Restartbenandlung.
-Vier andere Aufrufe erfolgen extern in setup(),setN()
+drei andere Aufrufe erfolgen extern in setN()
 und in simpleimmerWeiter() sowie animateimmerWeiter().
 An den letztgenannten Stellen wird die Version mit 
 Restartbehandlung produziert.
@@ -159,30 +222,6 @@ or
 end
 
 --[[
-n ist die zu markierende Zahl. v ist der Markierungswert. zugelassen sind v=0,1,2
---]]
-function markiere(n,v)
-setm(n,v) 
-end
-
---[[
-Markiert n mit v und falls v==1 ist: 
-Ergänzt die Tabelle der Primzahlen pt um den gefundene Eintrag n.
-Die genaue Logik dieser Funktion ist wesentlich für den korrekten
-Ablauf des Siebvorgangs.
-Wurde nur noch für v=1 gebraucht. Daher durch markprim ersetzt. 
-
-function markset(n,v)
-local vv=m(n)
-if vv==2 then markiere(n,v) end
-if v == 1 then 
-    appendPrime(n) -- es entsteht eine Table von Primzahlen + Begleitinformationen.
-    sposTo(n)
-end
-end
---]]
-
---[[
 n als Primzahl markieren und an Primzahltable pt anhängen.
 --]]
 function markprim(n)
@@ -200,16 +239,30 @@ d wird nur gesetzt, wenn der Siebalgorithmus zum
 ersten mal den Eintrag i in SE "besucht". Nur
 dadurch ist garantiert, dass d der kleinste Teiler
 von i ist. Danach hat die Marke m(i) den Wert 0.
+Wird bei animateVielfache aufgerufen.
 --]]
 function SETm(i,d)
 if m(i)==2 then SE[i]=d end  
+end
+
+--[=[
+    Dies ist eine Massnahme gegen einen Absturz. Wenn der Einstellungregler 
+    für die Variable N zu schnell gezogen wird, kommt es vor, dass der callback 
+    setN nicht für alle Werte von N aufgerufen wird und daher #SE < N bleibt.
+--]=]
+function repairSE()  
+
+    if(#SE ~= N) then
+    N=math.min(#SE,N) 
+    setN(N) 
+    end   
 end
 
 --[[
 Callback für die Schaltfläche "Einzelschritt"
 --]]
 function Weiter()
-if splashRunning() then return end -- vor Beendigung des StatupScreens nicht tun.
+if su.splashRunning() then return end -- vor Beendigung des StatupScreens nicht tun.
 if Animation and running then -- Bei einem "Folgeklick" auf die Schaltfläche "Einzelschritt".;
 tween.resetAll() 
 aniFinish()  
@@ -218,7 +271,7 @@ running=false
 streicheVielfache(prim) 
 end
 local wtr = Animation and animateWeiter or simpleWeiter
-if timekeeping then time=os.clock() end
+tk.start() --if timekeeping then time=os.clock() end
 wtr()  
 end
 
@@ -236,7 +289,7 @@ Callback für die Schaltfläche "Volldurchlauf"
 Alles in einem Volldurchlauf ausführen - ohne Nutzereingriff.
 --]]
 function allessieben()
-if splashRunning() then return end -- vor Beendigung des StatupScreens nicht tun.
+if su.splashRunning() then return end -- vor Beendigung des StatupScreens nicht tun.
 volldurchlauf=true
 sound(SOUND_PICKUP, 14295)
 Weiter()
@@ -311,7 +364,7 @@ function simplestreicheVielfache(n)
         auf keinen Fall erreicht werden . Daher stehen nach der Zuweisung dort 2 
         binäre 0.
         Mit dieser Behandlung wird in SE[i] der kleinste Teiler von i gespeichert.
-        Die Bedingung if m(i)==2... ist zwingend notwendig.
+        Die Bedingung if SE[i]==initbit... ist zwingend notwendig.
         --]]
         for i=k,N,n do if SE[i]==initbit then SE[i]=n end end --[[ 
                                                         Schrittweite ist n, 
@@ -321,7 +374,6 @@ function simplestreicheVielfache(n)
                                                         kann das  if ... mehrfach auftreten,
                                                         z.B. für alle Potenzen von n.
                                                         --]]
-        sposTo(n)
         if volldurchlauf then Weiter() elseif anirestart then Ani(true) anirestart=false end
     end
 end
@@ -345,8 +397,8 @@ function simpleimmerWeiter()  -- Ohne Animation
     fertig=true
     makenext=createMakenext(n)
     moveLiverectToMiddle()
-    testWolfram(N,pr(countprimes))
-    adjustInfoScrollrange()
+    wr.testWolfram(N,pr(countprimes))
+    ir:adjustRange()
     zeigeInfounten()
     zeigeGridunten()
     sound(SOUND_JUMP, 9979)
@@ -493,8 +545,8 @@ fertig=true
 makenext=createMakenext(nextprim)
 moveLiverectToMiddle()
 sound(SOUND_JUMP, 9979)
-testWolfram(N,pr(countprimes))     
-adjustInfoScrollrange()
+wr.testWolfram(N,pr(countprimes))     
+ir:adjustRange()
 scrollInfounten()        
 if gr.Y < gr.yMax then scrollGridunten() end
 tween.stop(liveid)
