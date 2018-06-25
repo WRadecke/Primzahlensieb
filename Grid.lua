@@ -138,7 +138,7 @@ weil die drawSE()-Funktion viel zu lange dauerte.
 --]]
 function drawSE()
     --[=[
-        Dieser Vorspann ist eine Massnahme gegen einen Absturz. Wenn der Einstellungregler 
+        Dieser Vorspann wirkt gegen einen Absturz. Wenn der Einstellungregler 
         für die Variable N zu schnell gezogen wird, kommt es vor, dass der callback 
         setN nicht für alle Werte von N aufgerufen wird und daher #SE < N bleibt.
     --]=]
