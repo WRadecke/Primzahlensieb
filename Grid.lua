@@ -1,5 +1,19 @@
 --# Grid
 
+--[[
+Festlegung von textabhängigen Größen für das Gitter
+--]]
+function prepareGridComponents()
+gfntsize=18
+FONT()
+fontSize(gfntsize)
+wCell,hCell=textSize("1000") -- wCell wird die Breite und Höhe der Gitterzellen
+GB=10*wCell                  -- gesamte Gitterbreite
+local txt="99999999. Primzahl"
+wP,hP=textSize(txt) 
+strokeWidth(2) 
+createGridScrollrange()
+end
 
 --[[
 x,y -Koordinaten für Zahlen im Gitter (Mitte der Gitterzelle i)
@@ -107,7 +121,7 @@ function drawGrid()
 end
 
 --[[
-Fünfstellige Zahlen im Gitter zweizeilig ausgeben. Das ist eine 
+bis zu 7-stellige Zahlen im Gitter zweizeilig ausgeben. Das ist eine 
 "Notlösung" für - im vorliegenden Zusammenhang - "große" Zahlen.
 --]]
 function drawNumberGE10000(i)
@@ -137,17 +151,6 @@ dass zu viele Ausgaben entstanden, und das Programm fast unbedienbar wurde,
 weil die drawSE()-Funktion viel zu lange dauerte.
 --]]
 function drawSE()
-    --[=[
-        Dieser Vorspann wirkt gegen einen Absturz. Wenn der Einstellungregler 
-        für die Variable N zu schnell gezogen wird, kommt es vor, dass der callback 
-        setN nicht für alle Werte von N aufgerufen wird und daher #SE < N bleibt.
-    --]=]
-    
-    if(1 < #SE and #SE < N) then     
-    for i= #SE,N do SE[i] = initBit() end  
-    setN(#SE) 
-    end
-    --------------------------------------------------------------------------------------------
     pushStyle()
     -- Die Mitte der Texte ( Textdarstellung der Zahlen ) wird in die Mitte der Gitterzellen gelegt.
     -- Die Farben der Zahlen entspricht dem aktuellen Siebzustand (0,1,2,3) der jeweiligen Zahl.
@@ -212,43 +215,56 @@ if i <= 9999 then text(i,x,gr.Y-y) else drawNumberGE10000(i) end
         fill(clr(a.infotext,ti))
         text(txt,xx,gr.Y-Y(mx))
     end 
-    
+
 popStyle()    
 end
 
 --[[
-Anpassen des Scrollbereiches des Gitters an einen
-eventuell veränderten Wert von N. Dann muss Scrollen 
-ermöglicht/verboten  werden. Da kann auch notwendig 
-werden, wenn die Orientierung des iPads wechselt.
+Der GridScrollRange gr wird nun so gebaut,dass der 
+InfoScrollRange ir (in Info.lua) von gr erben kann.
+Ich folge hier dem Vererbungsrezept in:
+Roberto Jerusalimschy:
+Programming in Lua, Fourth Edition, Seite 165
 --]]
-function adjustGridScrollrange()
-local y = gr and gr.Y or HEIGHT-1
-if gr then
-    gr.Y=y gr.yMin=HEIGHT-1 gr.yMax=math.max(HEIGHT-1,(math.floor((N-1)/10)+1)*wCell)
-    gr.isOpen=false
-    else
-    gr={Y=HEIGHT-1,yMin=HEIGHT-1,yMax=math.max(HEIGHT-1,(math.floor((N-1)/10)+1)*wCell)} 
-    gr.isOpen=false
+function createGridScrollrange()
+gr=
+{
+    Y=HEIGHT-1,
+    yMin=HEIGHT-1,
+    yMax=HEIGHT-1, 
+    isOpen=false,
+    enforceIntoRange=function (self,y)
+    return y<self.yMin and self.yMin or (y>self.yMax and self.yMax or y)
+    end,
+    adjustRange=function(self)  
+    self.yMin=HEIGHT-1
+    self.yMax=math.max(HEIGHT-1,(math.floor((N-1)/10)+1)*wCell)
+    self.isOpen=self.yMin < self.yMax
+    self.Y=self:enforceIntoRange(self.Y)
+    end
+}
+function gr:new(o)
+    o = o or {}        
+    self.__index = self        
+    setmetatable(o, self)        
+    return o   
 end
-gr.Y = gr.Y < gr.yMin and gr.yMin or gr.Y
-gr.Y = gr.Y > gr.yMax and gr.yMax or gr.Y
-gr.isOpen= gr.yMin < gr.yMax and true or false   
 end
 
 --[[
 Vertikales Scrollen im Gitter.
 Beim Scrollen wird die oberste Ausgabeposition gr.Y modifiziert.
 Möglicherweise wird das Gitter mit den Zahleninhalten oberhalb
-der y-Koordinate HEIGHT ins Unsichbare ausgegeben.
+der y-Koordinate HEIGHT ins Unsichtbare ausgegeben. Das passiert
+seit der Einführung der Funktionen seGrid,se12 fast nicht mehr.
+Es gibt nur noch oben und unten angerissene Gitterzeilen, deren
+unsichtbaren Anteile oberhalb/unterhalb der iPad-oberer/unterer
+Bildschirmgrenze ausgegeben werden.
 --]]
 function scrollGrid(touch)
 if 0 <= touch.x and touch.x <= GB then
     if gr.isOpen then
-        local y=touch.y-touch.prevY
-        gr.Y = gr.Y + y
-        gr.Y = gr.Y < gr.yMin and gr.yMin or gr.Y
-        gr.Y= gr.Y > gr.yMax and gr.yMax or gr.Y 
+        gr.Y=gr:enforceIntoRange(gr.Y+touch.y-touch.prevY)
     end
 end
 end
@@ -258,9 +274,7 @@ Gezieltes programmiertes Scrollen - ohne Animation - zu einer angegebenen
 vertikalen Position y.tbl bezieht sich auf eine Aktion miteiner TimedMessage.
 --]]
 function scrollGridTo(y,tbl)
-y=y < gr.yMin and gr.yMin or y
-y=y > gr.yMax and gr.yMax or y
-gr.Y=y
+gr.Y=gr:enforceIntoRange(y)
 if tbl and (tbl.p or tbl.ip) then 
 if tbl.p then gTM:Start(tbl) end
 end
@@ -273,9 +287,8 @@ einer TimedMessage
 Die Funktion wird innerhalb von gg(...) aufgerufen und ist ein
 Bestandteil des Inspektions-Modus.
 --]]
-function scrollGridAni(y,tbl) 
-y=y < gr.yMin and gr.yMin or y
-y=y > gr.yMax and gr.yMax or y  
+function scrollGridAni(y,tbl)   
+y=gr:enforceIntoRange(y)
 if tbl then
     if y~= gr.Y then 
         local  id=tween(1.0,gr, {Y=y},tween.easing.linear,gTM.Start,gTM,tbl)
@@ -316,7 +329,7 @@ Beispiele :
 function tapGrid(touch)
     if 0 <= touch.x and touch.x <= GB then
         local  nn=hitGrid(touch)
-        if nn > 0 then completeSEto(nn)    end
+        if nn > 0 and N < nn then completeSEto(nn)  return  end
         if gr.isOpen then       
             local y=touch.y
             y=y < wCell/4 and 0 or y
@@ -389,10 +402,10 @@ if isPrim(n) and not ip then
 local index=findindex(n) 
 tbl.ip=index
 end
-n,fun=navigate(n) -- fun , wenn nicht = nil ist eine Hinweisfunktion,
+n,fun=nv.navigate(n) -- fun , wenn nicht = nil ist eine Hinweisfunktion,
                   -- die letztlich in einer TimedMessage landet.
 if n > N then return end
-if tap1 then sposTo(navi().prim) end
+if tap1 then sposTo(nv.navi().prim) end
 local y=Y(n)
 tbl.p=n; if fun then tbl.hfun=fun end
 y=(HEIGHT-1)/2+y - wCell/2
@@ -431,15 +444,7 @@ auf eine leere Gitterzelle in der letzten (unteren)
 Gitterzeile.
 --]]
 function completeSEto(n)
-if N < n  and n <= 9999999 then
-    if prim == 1 then
-        for i=N+1,n do setm(i,2) end-- zur Ergänzung angebrochener Gitterzeilen
-        N=n
-        updateTitle()
-    elseif fertig then
-        setN(n) 
-    end
-end
+if N < n  and n <= 9999999 then setN(n) end
 end
 
 --[[
@@ -474,13 +479,13 @@ volldurchlauf=false
 end
 
 --[[
-Ein closure for navigation in inspection mode.
+Eine closure-Fabrik for navigation in inspection mode.
 Die erste Rückgabe-Funktion  dieser Funktion transformiert 
 die Fingertips ins Gitter, um nach Abschluss des Siebvorgangs 
 Primzahlen und ihre Vielfachen visuell zu inspizieren, und so
 den Ablauf ndes Siebes nochmal nachträglich nachzuvollziehen. 
 Es gibt eine einzige Aufrufstelle in der Gitter-Funktion gg.
-Die hier anonyme erste zRückgabe-Funktion heisst dort navigate.
+Die erste Rückgabe-Funktion heisst navigate.
 Besonders nützlich ist die Methode eine einmal besuchte 
 Gitterzelle nochmals anzutippen, um zur nächsten relevanten 
 Zelle zu kommen, wenn der Abstand dazu so groß ist, dass diese
@@ -488,12 +493,11 @@ Nächste nicht sichtbar ist.
 --]]
 function Navigation()
 --[[
-Returns a function-triple for navigation in results of sieving.
-Das Triple heisst - zugewiesen in setup() - navigate,navi,naviText
-
+Returns a function-table for navigation in results of sieving.
+Die table heisst - zugewiesen in setup() - nv
 --]]
-local navi={prim=1,ld=1,multi=1}
-local navitxt="{ prim = "..tostring(9999999)..", ld = "..tostring(9999)..", multi = "..tostring(9999999).." }"
+local navi={prim=1,ld=1,multi=1,f={}}
+local navitxt=table.concat{"{ prim = ",9999999,", ld = ",9999,", multi = ",9999999," #f= ",9999," }"}
 local fntsize=12
     
 --[[ ------------------------------------------------------------------------------------
@@ -506,9 +510,18 @@ local p,multi=navi.prim,navi.multi
 local txt=table.concat{multi,"+",p," > ",N} return txt 
 end
     
-local function ppgtN() -- bedeutet: prim*prim grater than N
+local function ppgtN() -- bedeutet: prim*prim greater than N
 local p=navi.prim
 local txt=table.concat{p,"*",p," > ",N} return txt
+end
+
+local function factorize(n)
+local m=n
+local f={}
+while not isPrim(m)
+do f[#f+1]=SE[m]; m=math.tointeger(m/SE[m]);  end
+f[#f+1]=m
+navi.f=f
 end
 ------------------------------------------------------------------------------------------   
      
@@ -516,13 +529,14 @@ pushStyle()
 font("Courier"); fontSize(fntsize)
 nw,nh=textSize(navitxt)
 popStyle()
-return       -- Die Returnwerte kommen noch, Es sind 3 Funktionen. 
-function (n) -- 1. Rückgabefunktion navigate: Navigiert mit Hilfe von navi
+return       -- Die Returnwerte kommen noch, Es sind 6 Funktionen. 
+{
+navigate=function (n) -- 1. Rückgabefunktion navigate: Navigiert mit Hilfe von navi
 --[[
-Die hier anonyme Funktion heisst im Globalen navigate. Sie arbeitet wie ein iterator, 
-der durch Primzahlen und ihre Vielfachen iteriert .Sein status ist die table navi.
-Die Vielfachen werden wie im Siebalgorithmus behandelt: Nachfolger eine Primzahl ist
-deren Quadrat.
+Die Funktion navigate arbeitet wie ein iterator, der durch Primzahlen 
+und ihre Vielfachen iteriert .Sein status ist die table navi.
+Die Vielfachen werden wie im Siebalgorithmus behandelt: 
+Nachfolger eine Primzahl ist deren Quadrat.
 Das Navigieren wird durch Fingertips ins Gitter oder in die Primzahltabelle ausgelöst.
 Ausgehend von einer Primzahl p navigiert die Funktion - bei wiederholtem Antippen eines
 bereits erreichten Navigationsziels zu Vielfachen von p. Falls man etwas anderes antippt,
@@ -533,8 +547,8 @@ darauf, gibt es einen Hinweis darauf, dass es nicht mehr weiter geht. Ebenso wir
 wenn p*p > N ist, denn dann gibt es überhaupt keine "Vielfachen <= N" von p, und es gibt 
 einen anderen Hiweis. Die beiden Hinweisfunktionen mppgtN,ppgtN sind interessant. Es
 sind locale Functionen relativ zu Navigation() - insbesondere nichtglobal. Trotzdem gelingt
-es diese Funktionen von aussen aufzurufen. Sie werden von der vorliegenden anonymen Funktion
-über die Kette ---> gg ---> ScrollGridAni ---> gTM:Start ---> gFunc weitergereicht, um zuletzt
+es diese Funktionen von aussen aufzurufen. Sie werden von navigate über die Kette 
+---> gg ---> ScrollGridAni ---> gTM:Start ---> gFunc weitergereicht, um zuletzt
 im Rahmen des TimedMessage-Objekts gTM einen zeitlich begrenzten Hinweis zu zeigen.
 Dabei wirkt zwischen ScrollGridAni und gTM:Start noch das Animations-System tween.
 --]]
@@ -542,16 +556,17 @@ if isPrim(n)
     then
         local prim,ld,multi=navi.prim,navi.ld,navi.multi
         navi.prim=n; navi.ld=1; navi.multi=1 
+        navi.f={}
         if n==prim and ld==1 and multi==1 then
                 local fun=nil
-                if n*n <= N then navi.ld=n navi.multi=n*n  else fun=ppgtN end
+                if n*n <= N then navi.ld=n navi.multi=n*n factorize(navi.multi) else fun=ppgtN end
                 return n*n <= N and navi.multi or navi.prim,fun
             else
                 navi.prim=n; navi.ld=1; navi.multi=1
                 return navi.prim
             end
      else 
-        if navi.prim==1 then navi.prim,navi.ld=SE[n],SE[n]  navi.multi=n return navi.multi 
+        if navi.prim==1 then navi.prim,navi.ld=SE[n],SE[n]  navi.multi=n factorize(navi.multi) return navi.multi 
         elseif n%navi.prim == 0 then
             local fun=nil
             if navi.multi == n then
@@ -561,16 +576,93 @@ if isPrim(n)
                 navi.multi=n
             end
             navi.ld=SE[navi.multi]
+            factorize(navi.multi)
             return navi.multi,fun
-        else navi.prim,navi.ld=SE[n],SE[n] navi.multi=n 
+        else navi.prim,navi.ld=SE[n],SE[n] navi.multi=n factorize(navi.multi)
             return navi.multi
         end
      end
 end,
-function () return navi end,    -- 2. Rückgabefunktion navi: Gibt die gekapselt table navi zurück.
-function ()                     -- 3. Rückgabefunktion naviText: Gibt eine Textdarstellung des Inhalts von navi zurück.
-local txt=table.concat{"{ prim = ",navi.prim,", ld = ",navi.ld,", multi = ",navi.multi," }"}
+navi=function () return navi end,    -- 2. Rückgabefunktion navi: Gibt die gekapselt table navi zurück.
+naviText=function ()                 -- 3. Rückgabefunktion naviText: Gibt eine Textdarstellung des Inhalts von navi zurück.
+local txt=table.concat{"{prim=",navi.prim,", ld=",navi.ld,", multi=",navi.multi," #f=",#navi.f,"}"}
 return txt,nw,nh,fntsize  -- außer txt auch Breite,Höhe der textbox und benutzten fontSize zurück geben.
+end,
+drawPrimefactors=function () -- 4. Rückgabefunktion: drawPrimefactors
+if WIDTH <= BI then return end
+local f,txt,tf=navi.f
+if #f > 0 then
+    pushStyle()
+    stroke(clr(a.thirdlines))
+    strokeWidth(2)
+    local yy=4*hCell
+    line(BI,yy,WIDTH,yy)
+    tf={tostring(navi.multi).."="..f[1]}
+    for i=2,#f do tf[#tf+1]="*"..f[i] end
+    txt=tf[1]
+    for i=2,#tf do txt=table.concat{txt,tf[i]} end
+    textMode(CORNER)
+    local ww=WIDTH-(BI+wsT)
+    textWrapWidth(ww)
+    textAlign(CENTER)
+    fontSize(gfntsize)
+    fill(clr(a.infotext))
+    local w,h=textSize(txt)
+    local y= yy+hCell+h
+    line(BI,y,WIDTH,y)
+    if w <= ww then 
+    textMode(CENTER)
+    text(txt,BI+ww/2,yy+hCell)      
+    else
+    text(txt,BI+wsT,yy)
+    end
+    line(BI,y,WIDTH,y)
+    textMode(CENTER)
+    text("Primfaktorisierung",(BI+WIDTH)/2,y+hCell/2)
+    popStyle()
 end
+end,
+drawNaviResults=function () -- 5. Rückgabefunktion drawNaviResults
+pushStyle()
+fontSize(18)  
+FONT()  
+fill(clr(a.infotext))
+textMode(CENTER)
+local factors,decs,txt={},{},{} 
+local txt1,txt2="",""
+if WIDTH > BI then  
+if navi.prim > 1 and navi.ld==1 and navi.multi==1 then 
+    txt1=tostring(navi.prim).." ist "..findindex(navi.prim)..". Primzahl"
+    text(txt1,(BI+WIDTH)/2,hCell/2)
+    return
+end
+if navi.prim <= 1 or navi.ld <= 1 or navi.multi <= 1 then return end        
+factors[1],factors[2] = navi.ld,math.tointeger(navi.multi/navi.ld)     
+if navi.prim ~= navi.ld then 
+factors[3],factors[4] = navi.prim,math.tointeger(navi.multi/navi.prim)
+end
+        
+local l,s = 0,0
+-- Anzahl der Dezimalstellen der Faktoren und deren Maximum l bestimmen
+for i=1,#factors do decs[i] = 1 + math.floor(math.log10(factors[i])) end
+for i=1,#decs do  if decs[i] > l then l=decs[i] end end 
+-- Texte bis zur maximalen Stellenzahl mit führenden Leerzeichen auffüllen.
+for i=1,#factors do s=math.floor(l-decs[i]); txt[i] = string.rep(" ",s)..factors[i]  end
+txt1=table.concat{navi.multi," = ",txt[2]," * ",txt[1]} 
+if #factors==4 then txt2=table.concat{navi.multi," = ",txt[4]," * ",txt[3]} end
+-- Falls beide Texte erscheinen, sind die Produkte passend übereinander ausgerichtet.
+if txt1 ~= "" and txt2 ~= "" then
+text(txt1,(BI+WIDTH)/2,hCell+hCell/2)
+text(txt2,(BI+WIDTH)/2,hCell/2)
+else
+text(txt1,(BI+WIDTH)/2,hCell/2)
+end
+popStyle()
+end
+end,
+navireset=function () -- 6. Rückgabefunktion: Stellt den Anfangszustand von navi wieder her.
+navi.prim=1;navi.ld=1;navi.multi=1;navi.f={}       
+end
+}
 end
 
