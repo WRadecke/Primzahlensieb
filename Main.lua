@@ -3,13 +3,11 @@
 
 --[[
 Globale Objekte sind:
-time                -- global time for os.clock
-timekeeping         -- switch(on/off) for timekeeping ( see also function tk() )
-
 N                   -- Siebgröße = Obergrenze der zu siebenden Zahlen
 wCell,hCell,wiT,hiT -- verschiedene Schriftbreiten/Schrifthöhen
 wsT                 -- Für ein führendes Leerzeichen in jeder Zeile der Primzahlliste
 fntsize             -- 12 oder 14 je nach Größe von N für Info-Bereich
+ff                  -- eine Anzahl von Dezimalstellen für die Primzahlenliste
 gfntsize            -- 18 für Gitter
 prim                -- aktuelle Primzahl        
 countprimes         -- Anzehl der gefundenen Primzahlen
@@ -28,6 +26,7 @@ GB                  -- Gitterbreite
 BI                  -- rechter Rand des Info-Bereiches
 H                   -- aktuelle Fensterhöhe
 yThirdBottom,yThirdMiddle yThirdTop     -- Mitteldrittel-Werte
+spos,epos           -- für animierbare Rechtecke um Gitterzellen
 -- und die Tabellen:----------------------------------------------------------------
 colortables         -- für zwei verschiedenen Farbschemata
 SE                  -- Diese Tabelle ist der wichtigste Zustand während des Siebens.
@@ -35,17 +34,19 @@ pt                  -- Tabelle der gefundenen Primzahlen,{2,3,5,...}
 lt                  -- table der Livetweens
 gr                  -- GridScrollrange
 ir                  -- InfoScrollrange
--- und die 10 von closures erzeugte Funktionen ---------------------------
+-- und die von closure-Fabriken  erzeugte Funktionen --------------------
+makenext()          -- für die nächste Primzahl
 m(i)                -- Auslesen des Siebzustands von i
 setm(i,v)           -- Setzen des Siebzustands von i
 initBit()           -- Rückgabe des Initialisierungszustand für alle i in SE
 pr(i)               -- zum Auslesen der Primzahlen aus der table pt
 isTwinAt(i)         -- zum Testen auf Primzahlzwillinge in pt
-testWolfram(N,last) -- zum Absolvieren eines Wolfram-Tests
-tweenSplash
-drawSplash
-splashRunning
-splashsetRunning
+isTwin(i)           -- Testen auf Primzahlzwillinge im Gitter
+function-table ic   -- für InfoComponents
+function-table wr   -- für wolfram-Test  
+function-table nv   -- Zur Navigation im Inspektionsmodus
+function-table tk   -- Funktionen für Zeitmessung
+function-table su   -- für den StartupScreen
 --]]
 function setup()
 ------------ for debugging ---------
@@ -53,41 +54,31 @@ function setup()
 --print(readGlobalData("dbugData"))
 --stop()
 gstr=""
-------------------------------------
-ich=readImage("Dropbox:ich")
-ichich=readImage("Dropbox:ich3")
-eulerwr=readImage("Dropbox:eulerwr")
-euler4=readImage("Dropbox:euler4")
-defineColorTables()
-time=0
-timekeeping=false
-timetext=""
-N=310
-BI=749 -- fester rechter Rand des Info-Bereichs
-countprimes=0
-twinpairs=0
-tap1=false
-
-ecount=nil
-splashrunning=true
+------ sprites für StartupScreen ---------------------------------------
+ich=readImage("Documents:ich")
+ichich=readImage("Documents:ichich")
+euler5=readImage("Documents:euler5")
+euler6=readImage("Documents:euler6")
+Sp1=readImage("Documents:Spirale5")
+Sp2=readImage("Documents:Spirale6")
+Sp3=readImage("Documents:Spirale8")
+Sp4=readImage("Documents:Spirale7")
+spirales={Sp1,Sp2,Sp3,Sp4}
+------------------------------------------------------------------------
+defineColorTables()   -- für zwei Farbschemata
+tk=createTimeKeeper() -- für Zeitmessungen
+N=310               -- initiale Siebgröße     
 gTM=TimedMessage(gFunc,0,-1,10.0)  -- Bestandteil des Inspektions-Modus.
-iTM=TimedMessage(iFunc,0,-1,10.0)  -- Bestandteil des Inspektions-Modus.
-gfntsize=18
-FONT()
-fontSize(gfntsize)
-wCell,hCell=textSize("1000") -- wCell wird die Breite und Höhe der Gitterzellen
-GB=10*wCell                  -- gesamte Gitterbreite
-wP,hP=PCell()
-yTop=0      
-strokeWidth(2)
+iTM=TimedMessage(iFunc,0,-1,10.0)  -- Bestandteil des Inspektions-Modus.   
+prepareGridComponents()  -- ruft auch createGridScrllrange() auf
 volldurchlauf=false
---[[ ------------------------------------------------------------
-Ein closure für alle "Bit-Funktionen", Kapsel die benutzen
+--[[ -------------------------------------------------------------------
+Eine closure-Fabrik für alle "Bit-Funktionen", Kapselt die benutzen
 konstanten "Bits", die danach nicht mehr explizit im Code
 auftauchen müssen.
 --]]
 local function allBitFuncs()
-local initbit=0x2FFFFFFFFFFFFFFF
+local initbit=0x2000000000000000
 local clearbits=~(3<<60)
 local lbits=0x7FFFFFFFFFFFFFFF
 local hbit=0x8000000000000000
@@ -95,20 +86,21 @@ local mbits = 3<<60
 local primbit,twinbit = 1<<60, 1<<63
 return 
 {
-function (i,v) SE[i] = ((clearbits&SE[i])|(v<<60)) end,
+function (i,v) SE[i] = v<<60 end, --((clearbits&SE[i])|(v<<60)) end,
 function () return initbit end,
 function (n) return lbits&pt[n] end,
 function (i) return hbit&pt[i]==hbit and true or false end, 
 function (i)  return (mbits&SE[i]) >> 60 end,
 function (i)  return   primbit&SE[i] ~= 0 end,
-function (i)  return   twinbit&SE[i] ~= 0 end --
+function (i)  return   twinbit&SE[i] ~= 0 end,
+function (i)  return (SE[i] & (~(primbit|twinbit))) end
 }
 end
-setm,initBit,pr,isTwinAt,m,isPrim,isTwin=unpack(allBitFuncs())
---------------------------------------------------------------
+setm,initBit,pr,isTwinAt,m,isPrim,isTwin,pp=unpack(allBitFuncs())
+------------------------------------------------------------------------
 
-reset()
-
+nv=Navigation() -- nv ist function-table with named functions
+ic=prepareInfoComponents() -- ruft auch createInfoScrollrange() auf
 CI=clrindextwin
 spos={x=X(1),Y(1)}
 epos={x=X(1),y=Y(1)}
@@ -123,13 +115,16 @@ parameter.boolean("zwillinge",true,Zwillis)
 parameter.watch("prim_countprimes")
 parameter.watch("vielfaches")
 pasteboard.copy("gm{ip=1000,ani=true}")
-N=readProjectData("sievesize",310);setN(N)
-makenext=createMakenext(1)
+-- pasteboard.copy("gm{p= 8388608,true}")
+N=readProjectData("sievesize",310)
+setN(N)
 makeLiveTweens()
 liveid=tween(lt[1],lt.spos,lt.epos,lt.opts)  
 tween.stop(liveid)
-testWolfram,wolframTbl,compareResult=createTailCompare() -- Test auf Übereinstimmung von einem Ende von pt mit 
-                                                         -- einer entsprechenden Tabelle aus der WOLFRAM CLOUD
+--testWolfram,wolframTbl,compareResult
+wr=createTailCompare() -- wr ist eine function-table mit benannten Funktionen.
+                       -- Test auf Übereinstimmung von einem Ende von pt mit 
+                       -- einer entsprechenden Tabelle aus der WOLFRAM CLOUD
 -- Ein Tip aus codea.io: sehr nützlich ---------------------------------------------------
 local update,noop = tween.update,function() end
 tween.pauseAll = function()
@@ -142,11 +137,10 @@ end
 W=WIDTH
 H=HEIGHT
 ss=setN -- merke: ss = sieve size; ss ist leichter im control panel zu schreiben als setN
-local startupfuncs=createStartupScreen()
-ssp,ssups,pivot,std=unpack(startupfuncs,1,4) -- config-fuctions to call from control-panel
-tweenSplash,drawSplash,splashRunning,splashEnd=unpack(startupfuncs,5,8) -- working-functions
-tweenSplash() -- StartupScreen (eventuell- falls configuriert - ) starten.
+su=createStartupScreen() -- su ist eine function-table mit benannten Funktionen
+su.tweenSplash() -- StartupScreen (eventuell- falls configuriert - ) starten.
 end
+
 
 -- for debugging ------------------
 function dBug(s)
@@ -157,49 +151,20 @@ end
 
 --[[
 Alles auf Anfangszustand setzen, aber nicht N zurücksetzen.
-Das aktuelle Farbschema sowie der Inspektionmodus (tap1=true)
-werden ebenfalls nicht zurück gesetzt.
+Das aktuelle Farbschema wird auch nicht zurück gesetzt.
 --]]
-function reset()
-    gTM.running,iTM.running=false,false 
-    initSE()
-    prim=1                       -- die jeweils aktuell gefundene Primzahl
-    countprimes=0                -- aktuelle Anzahl der gefundenen Primzahlen
-    prim_countprimes=tostring(prim).." / "..countprimes
-    volldurchlauf=false
-    twinpairs=0
-    ecount=nil
-    vielfaches=1
-    vorheriges=1
-    aniaborted=false
-    anirestart=false
-    running=false   -- während eine Animation läuft ist der Wert true
-    pause=false     -- zeigt an ob eine Animation aktuell läuft (false) oder pausiert (true).
-    pt={}           -- Tabelle der gefundenen Primzahlen + Begleitmerkmale
-    pushStyle()
-    wiT,hiT=0,0
-    FONT()
-    fntsize = N >= 1000000 and 12 or 14
-    fontSize(fntsize)
-    local _
-    if N >= 1000000 then
-    wiT,hiT=textSize("11111111") -- hiT ist globale Höhe der Texte im Infobereich
-    wsT,_=textSize("1")         -- Ein Leerzeichen am Anfang jeder Zeile in der Primzahlliste    
-    else
-    wiT,hiT=textSize("1111111") -- hiT ist globale Höhe der Texte im Infobereich
-    wsT,_=textSize("1")         -- Ein Leerzeichen am Anfang jeder Zeile in der Primzahlliste
-    end
-    popStyle()
-    yTop=HEIGHT-1-hCell-3*hiT
-    fertig=false    -- = true,wenn das Sieben beendet ist.
-    if N then adjustGridScrollrange()  end
-    ir={yR=yTop,yMin=yTop,yMax=yTop}
-    adjustInfoScrollrange()
+function reset() 
+    gTM.running,iTM.running=false,false
+    algoreset()
+    ic.inforeset() 
+    wiT,hiT,wsT,yTop,fntsize,ff=ic.IC(N) -- InfoComponents
+    gr:adjustRange()
+    ir:adjustRange() 
     if spos then spos.x,spos.y=X(1),Y(1) end
     if epos then epos.x,epos.y=X(1),Y(1) end
     defineThirdsLines()
     updateTitle()
-    navigate,navi,naviText=Navigation()
+    nv.navireset()
 end
 
 --[[
@@ -209,6 +174,7 @@ Wird auch von aussen aufgerufen durch eine interaktive Eingabe der Form:
 laufenden Programms. Beschränkt praktisch die Siebgröße auf maximal 10 Millionen.
 --]]
 function setN(k,save)
+k = k or 9999999 -- Höchstwert setzen, falls k nicht angegeben.
 k = k <= 9999999 and k or 9999999
 N=math.floor(k)
 makenext=createMakenext(1)
@@ -224,18 +190,6 @@ switching timekeeping on/off
 function tk()
 timekeeping = not timekeeping and true or false
 end
-
---[[
-Für Festlegung der Textgröße "99999999. Primzahl"
-im Inspektionsmodus.
---]]
-function PCell()
-FONT()
-fontSize(gfntsize)
-txt="99999999. Primzahl"
-return textSize(txt)
-end
-
 
 
 --[[
@@ -295,12 +249,12 @@ if H ~= HEIGHT or W ~= WIDTH then -- W,H ist noch die alte Höhe vor dem Orienti
 end   
 yTop=HEIGHT-1-hCell-3*hiT     
 defineThirdsLines()
-adjustGridScrollrange()
+gr:adjustRange()
 if prim == 1 then scrollGridTo(gr.yMin) 
 else
   if gMiddle then local _,y=XY(gMiddle) scrollGridTo(y + HEIGHT/2) end
 end
-adjustInfoScrollrange()
+ir:adjustRange() 
 if prim == 1 then scrollInfoTo(ir.yMin) 
 else 
   if iMiddle then local _,y=pXY(iMiddle) scrollInfoTo(y + HEIGHT/2) end  
@@ -370,9 +324,10 @@ Zeichnet alle vorgesehenen Elemente des Siebvorgangs
 in das Hauptfenster.
 --]]
 function draw() 
+repairSE()
 background(clr(a.bg))
-if splashRunning() then 
-    drawSplash()   -- StartupScreen zeigen   
+if su.splashRunning() then 
+    su.drawSplash()   -- StartupScreen zeigen   
 else               -- Normale "Arbeitsoberfläche" zeigen.
     drawTip()
     drawGrid()
@@ -380,7 +335,7 @@ else               -- Normale "Arbeitsoberfläche" zeigen.
     gTM:draw()
     drawspos()
     if prim > 1 and prim*prim <= N then kennzeichneVielfache(prim) end  
-    local rsprim=navi().prim
+    local rsprim=nv.navi().prim
     if rsprim > 1 and rsprim*rsprim <= N then kennzeichneVielfache(rsprim) end
     iTM:draw()
     drawLiveTweens()
@@ -388,11 +343,13 @@ else               -- Normale "Arbeitsoberfläche" zeigen.
     drawTap1()
     drawPrimes()
     drawTitleandCountPrimes()
+    drawSpiralMuster(su.spiralindex())
     if fertig then 
         drawEndmeldung()
-        drawTimeText()
+        tk.draw()
         drawTestText()
-        drawNaviText(navi()) 
+        nv.drawNaviResults() 
+        nv.drawPrimefactors()
     end 
 end
 end
@@ -419,7 +376,6 @@ end
 Unterbrechung und weitermachen ermöglichen
 --]]
 function unterbrechung()
---local dm=volldurchlauf
 if Animation and running then 
     tween.resetAll()
     if pause then PauseResume() end
