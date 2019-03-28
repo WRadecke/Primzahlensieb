@@ -185,14 +185,6 @@ end
 end
 
 --[[
-switching timekeeping on/off
---]]
-function tk()
-timekeeping = not timekeeping and true or false
-end
-
-
---[[
 Zwei Funktionen zur Farbauswahl für Zahlen im Gitter.
 Wenn zwillinge=true ist, muss clrindextwin verwendet
 werden, ansonsten clrindexnorm. In Zwillis(val) wird
@@ -208,9 +200,9 @@ function clrindextwin(i) return m(i) + (isTwin(i) and 3 or 1) end
 This function gets called when the device orientation changes
 Die Function wird schon vor setup() aufgerufen, was eher ärgerlich ist
 --]]
-function orientationChanged( newOrientation )
+function sizeChanged( newOrientation )
 if not H then return end -- H wird erst am Ende von setup() gesetzt - auf den Wert von HEIGHT.
-OnOrientationChanged()  
+OnSizeChanged()  
 end
 
 --[[
@@ -237,7 +229,7 @@ Rand der Primzahltabelle durch einen kleinen Bindestrich markiert. Wenn außerde
 der ganz rechte Bereich Zusatz-Info gezeigt wird - z.B. im iPad-Landschafts-Modus - 
 kennzeichnet der dicke grüne Pfeil auch die vertikale Mitte (die "Nase").
 --]]
-function OnOrientationChanged()
+function OnSizeChanged()
 local iMiddle,gMiddle
 if H ~= HEIGHT or W ~= WIDTH then -- W,H ist noch die alte Höhe vor dem Orientierungswechsel
     gMiddle=10*math.ceil((gr.Y-H/2)/wCell)
@@ -246,7 +238,7 @@ if H ~= HEIGHT or W ~= WIDTH then -- W,H ist noch die alte Höhe vor dem Orienti
     H = HEIGHT
     if Animation and running then
     tween.pauseAll()      
-end   
+end  
 yTop=HEIGHT-1-hCell-3*hiT     
 defineThirdsLines()
 gr:adjustRange()
@@ -392,5 +384,31 @@ Abbruch und Neustart von Anfang an ermöglichen.
 --]]
 function abbruch()
 tween.stop(liveid) tween.resetAll() reset()    
+end
+--[[
+Zwei Funktionen zum Überprüfen des Ergebnis einer Aufgabe 
+aus der Mathematikolympiade 2018 (Klasse 5, Carolin)
+--]]
+function a1(n,c)
+local c=c or "1"
+local str=tostring(n)
+local a=0
+for c in str:gmatch(c) do
+    a=a+1
+end 
+return a
+end
+--[[
+Aufgabe: Wieviel Ziffern 1 werden ausgedruckt, wenn alle ganzen Zahlen
+von 1 bis 2018 ausgedruckt werden. Die Funktion A1 berechnet diese 
+Anzahl zu 1611. Das bestätigt gedankliche Überlegungen die zur Lösung
+der Aufgabe 580513 c) verwendet werden können. 
+Vergleiche MO-2018.pdf in Goodreader auf diesem iPad.
+--]]
+function A1(m,c)
+local c= c or "1"
+local a=0
+for i=1,m do a=a+a1(i,c) end
+return a
 end
 -- Ende Hilfsfunktionen ----------------------------------------
